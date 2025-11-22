@@ -1,0 +1,20 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/relayer/poll-deposits",
+      "schedule": "*/5 * * * * *"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_NEAR_NETWORK": "testnet",
+    "NEXT_PUBLIC_CONTRACT_ID": "anyone-pay.testnet",
+    "NEXT_PUBLIC_INTENTS_CONTRACT": "intents.testnet",
+    "X402_FACILITATOR": "x402.near"
+  }
+}
+

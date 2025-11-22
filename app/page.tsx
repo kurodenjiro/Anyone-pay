@@ -1,0 +1,213 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { AmbientBackground } from '@/components/AmbientBackground'
+import { FloatingInput } from '@/components/FloatingInput'
+import { IntentsQR } from '@/components/IntentsQR'
+import { IntentFlowDiagram } from '@/components/IntentFlowDiagram'
+import { WalletProvider } from '@/components/WalletProvider'
+import { parseIntent } from '@/lib/intentParser'
+
+export default function Home() {
+  const [showInput, setShowInput] = useState(false)
+  const [query, setQuery] = useState('')
+  const [intentData, setIntentData] = useState<{
+    type: string
+    depositAddress: string
+    amount: string
+    redirectUrl: string
+  } | null>(null)
+  const [showFlow, setShowFlow] = useState(false)
+  const [depositConfirmed, setDepositConfirmed] = useState(false)
+
+  useEffect(() => {
+    // Auto-show input after a brief delay for first load (only if no intent data)
+    if (!intentData) {
+      const timer = setTimeout(() => {
+        setShowInput(true)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [intentData])
+
+  const handleSubmit = async (text: string) => {
+    setQuery(text)
+    // Keep input visible - don't hide it
+
+    // Parse intent using Next.js API route
+    const parsed = await parseIntent(text)
+    const amount = parsed.amount || '0.1'
+    
+    // Generate deposit address using NEAR Intents SDK / 1-Click API
+    const { depositAddress, intentId } = await generateDepositAddress(parsed.type, amount, parsed)
+    
+    setIntentData({
+      type: parsed.type,
+      depositAddress,
+      amount,
+      redirectUrl: parsed.redirectUrl || '',
+    })
+    setShowFlow(true)
+
+    // Start polling for deposit confirmation
+    pollDepositConfirmation(depositAddress)
+  }
+
+  const generateDepositAddress = async (
+    intentType: string, 
+    amount: string,
+    parsed: any
+  ): Promise<{ depositAddress: string; intentId: string }> => {
+    const timestamp = Date.now()
+    const intentId = `intent-${timestamp}`
+    let depositAddress = `intents.testnet::deposit::${intentType}::${timestamp}`
+    
+    // Register with relayer (now Next.js API with 1-Click integration)
+    try {
+      const response = await fetch('/api/relayer/register-deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intentId,
+          intentType,
+          depositAddress, // Initial mock address
+          amount,
+          recipient: parsed.metadata?.to || '',
+          senderAddress: '', // Will be set from wallet if available
+        }),
+      })
+      const data = await response.json()
+      // Use real deposit address from 1-Click API if available (for swaps)
+      if (data.depositAddress) {
+        depositAddress = data.depositAddress
+      }
+    } catch (error) {
+      console.error('Failed to register deposit:', error)
+    }
+    
+    return { depositAddress, intentId }
+  }
+
+  const pollDepositConfirmation = async (address: string) => {
+    const maxAttempts = 60 // 5 minutes max
+    let attempts = 0
+
+    const poll = async () => {
+      try {
+        const response = await fetch('/api/relayer/check-deposit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address }),
+        })
+        
+        const data = await response.json()
+        
+        if (data.confirmed) {
+          setDepositConfirmed(true)
+          // Redirect to premium content after a brief delay
+          setTimeout(() => {
+            if (intentData?.redirectUrl) {
+              window.location.href = intentData.redirectUrl
+            }
+          }, 2000)
+        } else if (attempts < maxAttempts) {
+          attempts++
+          setTimeout(poll, 5000) // Poll every 5 seconds
+        }
+      } catch (error) {
+        console.error('Polling error:', error)
+        if (attempts < maxAttempts) {
+          attempts++
+          setTimeout(poll, 5000)
+        }
+      }
+    }
+
+    poll()
+  }
+
+  const handleClickAnywhere = () => {
+    if (!showInput) {
+      setShowInput(true)
+    }
+  }
+  
+  const handleNewQuery = () => {
+    // Reset when user wants to start a new query
+    setIntentData(null)
+    setShowFlow(false)
+    setDepositConfirmed(false)
+    setQuery('')
+  }
+
+  return (
+    <WalletProvider>
+      <main 
+        className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900"
+        onClick={handleClickAnywhere}
+      >
+        <AmbientBackground />
+        
+        {/* Branding */}
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
+          <h1 className="text-2xl font-bold gradient-text">Anyone Pay Legend</h1>
+        </div>
+        
+        {/* All components in one page flow - centered and shortened */}
+        <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 max-w-2xl mx-auto w-full pt-20">
+          {/* Input - first component */}
+          <div className="w-full">
+            <FloatingInput
+              show={showInput}
+              onSubmit={handleSubmit}
+              onClose={() => setShowInput(false)}
+            />
+          </div>
+
+          {/* QR Code - second component */}
+          {intentData && showFlow && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="w-full"
+            >
+              <IntentsQR 
+                depositAddress={intentData.depositAddress}
+                amount={intentData.amount}
+              />
+            </motion.div>
+          )}
+
+          {/* Flow Diagram - third component */}
+          {intentData && showFlow && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className="w-full"
+            >
+              <IntentFlowDiagram 
+                confirmed={depositConfirmed}
+              />
+            </motion.div>
+          )}
+
+          {/* Status message */}
+          {depositConfirmed && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-purple-400 text-sm flex items-center gap-2"
+            >
+              <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+              Redirecting to premium content...
+            </motion.div>
+          )}
+        </div>
+      </main>
+    </WalletProvider>
+  )
+}
+
