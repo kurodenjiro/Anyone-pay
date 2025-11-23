@@ -2,20 +2,41 @@
 
 import { CheckCircle2, ArrowRight } from 'lucide-react'
 
-interface IntentFlowDiagramProps {
-  confirmed: boolean
+interface FlowStep {
+  id: number
+  label: string
+  status: string
 }
 
-const steps = [
-  { id: 1, label: 'Scan QR & Deposit to Zcash Intents Address', status: 'active' },
-  { id: 2, label: 'Intent Funding', status: 'pending' },
-  { id: 3, label: 'Cross-Chain Swap (if needed)', status: 'pending' },
-  { id: 4, label: 'x402 Payment (USDC)', status: 'pending' },
-  { id: 5, label: 'Content Unlock', status: 'pending' },
-]
+interface IntentFlowDiagramProps {
+  confirmed: boolean
+  chain?: string
+  needsBridge?: boolean
+  bridgeTo?: string
+}
 
-export function IntentFlowDiagram({ confirmed }: IntentFlowDiagramProps) {
-  const activeStep = confirmed ? 5 : 1
+const getSteps = (chain?: string, needsBridge?: boolean, bridgeTo?: string): FlowStep[] => {
+  const steps: FlowStep[] = [
+    { id: 1, label: 'NEAR AI Analyzes Intent', status: 'active' },
+    { id: 2, label: 'Create Zcash Deposit Address', status: 'pending' },
+    { id: 3, label: 'Scan QR & Deposit Zcash', status: 'pending' },
+  ]
+  
+  if (needsBridge && bridgeTo) {
+    steps.push({ id: 4, label: `Bridge Zcash to ${bridgeTo.toUpperCase()}`, status: 'pending' })
+  }
+  
+  steps.push(
+    { id: 5, label: 'Intent Funding Complete', status: 'pending' },
+    { id: 6, label: 'Content Unlock', status: 'pending' }
+  )
+  
+  return steps
+}
+
+export function IntentFlowDiagram({ confirmed, chain, needsBridge, bridgeTo }: IntentFlowDiagramProps) {
+  const steps = getSteps(chain, needsBridge, bridgeTo)
+  const activeStep = confirmed ? steps.length : 1
 
   return (
     <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 w-full shadow-xl shadow-purple-500/10">

@@ -37,8 +37,18 @@ export async function POST(request: NextRequest) {
         depositAddress = `intents.testnet::deposit::${intentType}::${Date.now()}`
       }
     } else {
-      // For other intents, use mock deposit address
-      depositAddress = `intents.testnet::deposit::${intentType}::${Date.now()}`
+      // For payment intents, generate Zcash deposit address
+      // In production, this would integrate with Zcash wallet API
+      depositAddress = generateZcashAddress(intentId)
+    }
+    
+    function generateZcashAddress(id: string): string {
+      // Generate Zcash Sapling shielded address (zs1 format)
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+      const randomPart = Array.from({ length: 74 }, () => 
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join('')
+      return `zs1${randomPart}`
     }
 
     const result = registerDeposit(depositAddress, intentId, amount, recipient, swapId, intentType)

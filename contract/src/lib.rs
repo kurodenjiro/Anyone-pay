@@ -1,8 +1,8 @@
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, Balance, Promise, PromiseResult};
+use near_sdk::{env, near_bindgen, AccountId, Promise, NearToken};
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
@@ -11,13 +11,13 @@ pub struct Intent {
     pub user: AccountId,
     pub intent_type: String,
     pub deposit_address: String,
-    pub amount: Balance,
+    pub amount: u128,
     pub status: IntentStatus,
     pub redirect_url: String,
     pub created_at: u64,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub enum IntentStatus {
     Pending,
@@ -39,8 +39,8 @@ impl Default for AnyonePay {
     fn default() -> Self {
         Self {
             intents: UnorderedMap::new(b"i".to_vec()),
-            x402_facilitator: AccountId::new_unchecked("x402.near".to_string()),
-            intents_contract: AccountId::new_unchecked("intents.testnet".to_string()),
+            x402_facilitator: AccountId::try_from("x402.near".to_string()).unwrap(),
+            intents_contract: AccountId::try_from("intents.testnet".to_string()).unwrap(),
         }
     }
 }
@@ -86,6 +86,7 @@ impl AnyonePay {
         
         // In production, this would call intents.near to verify deposit
         // For now, we'll use a view call pattern
+        let gas = env::prepaid_gas().saturating_sub(near_sdk::Gas::from_tgas(10));
         Promise::new(self.intents_contract.clone())
             .function_call(
                 "mt_batch_balance_of".to_string(),
@@ -93,8 +94,8 @@ impl AnyonePay {
                     "account_id": intent.deposit_address,
                 }))
                 .unwrap(),
-                0,
-                env::prepaid_gas() / 2,
+                NearToken::from_yoctonear(0),
+                gas,
             );
 
         true
@@ -121,6 +122,7 @@ impl AnyonePay {
         self.intents.insert(&intent_id, &updated_intent);
 
         // Call x402 facilitator for payment
+        let gas = env::prepaid_gas().saturating_sub(near_sdk::Gas::from_tgas(10));
         Promise::new(self.x402_facilitator.clone())
             .function_call(
                 "pay".to_string(),
@@ -130,8 +132,8 @@ impl AnyonePay {
                     "token": "usdc",
                 }))
                 .unwrap(),
-                amount.0,
-                env::prepaid_gas() / 2,
+                NearToken::from_yoctonear(amount.0),
+                gas,
             )
             .then(
                 Self::ext(env::current_account_id())

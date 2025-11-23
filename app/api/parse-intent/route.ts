@@ -1,119 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { analyzePromptWithNearAI, detectChainForDomain } from '@/lib/nearAI'
 
 interface ParsedIntent {
   intent_type: string
   amount: string
   redirect_url: string
   metadata: Record<string, any>
-}
-
-// Enhanced intent parser with better location detection
-function parseIntentFallback(query: string): ParsedIntent {
-  const queryLower = query.toLowerCase()
-  
-  // Weather forecast intent
-  if (queryLower.includes('weather') || queryLower.includes('forecast')) {
-    let location = 'Tokyo'
-    let lat = 35.6895
-    let lon = 139.6917
-    
-    // Extract location from query
-    if (queryLower.includes('tokyo')) {
-      location = 'Tokyo'
-      lat = 35.6895
-      lon = 139.6917
-    } else if (queryLower.includes('new york') || queryLower.includes('nyc')) {
-      location = 'New York'
-      lat = 40.7128
-      lon = -74.0060
-    } else if (queryLower.includes('london')) {
-      location = 'London'
-      lat = 51.5074
-      lon = -0.1278
-    } else if (queryLower.includes('paris')) {
-      location = 'Paris'
-      lat = 48.8566
-      lon = 2.3522
-    }
-    
-    // Extract days if mentioned
-    const daysMatch = query.match(/(\d+)[-\s]?day/i)
-    const days = daysMatch ? parseInt(daysMatch[1]) : 10
-    
-    return {
-      intent_type: 'weather_forecast',
-      amount: '0.02',
-      redirect_url: `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&appid=PREMIUM_TOKEN&access=intent-${Date.now()}`,
-      metadata: { location, coords: { lat, lon }, days },
-    }
-  }
-  
-  // Image generation intent
-  if (queryLower.includes('image') || queryLower.includes('generate') || 
-      queryLower.includes('dragon') || queryLower.includes('picture') ||
-      queryLower.includes('draw') || queryLower.includes('create')) {
-    return {
-      intent_type: 'image_generation',
-      amount: '0.05',
-      redirect_url: `https://api.groq.com/v1/images/generations?access=intent-${Date.now()}`,
-      metadata: { prompt: query },
-    }
-  }
-  
-  // Swap intent - uses 1-Click API for real cross-chain swaps
-  if (queryLower.includes('swap') || queryLower.includes('convert') || 
-      queryLower.includes('exchange')) {
-    const amountMatch = query.match(/(\d+(?:\.\d+)?)\s*(?:near|n)/i)
-    const amount = amountMatch ? amountMatch[1] : '2'
-    
-    let toToken = 'USDC'
-    let destinationAsset = 'nep141:arb-0x912ce59144191c1204e64559fe8253a0e49e6548.omft.near' // USDC on Arbitrum
-    if (queryLower.includes('usdt')) {
-      toToken = 'USDT'
-      destinationAsset = 'nep141:usdt.fakes.testnet'
-    }
-    if (queryLower.includes('usdc')) {
-      toToken = 'USDC'
-      destinationAsset = 'nep141:arb-0x912ce59144191c1204e64559fe8253a0e49e6548.omft.near'
-    }
-    
-    return {
-      intent_type: 'swap',
-      amount,
-      redirect_url: '',
-      metadata: { 
-        from: 'NEAR', 
-        to: toToken, 
-        amount,
-        originAsset: 'nep141:wrap.near',
-        destinationAsset,
-      },
-    }
-  }
-  
-  // Purchase intent
-  if (queryLower.includes('buy') || queryLower.includes('purchase') ||
-      queryLower.includes('milk tea') || queryLower.includes('tea') ||
-      queryLower.includes('coffee') || queryLower.includes('drink')) {
-    let item = 'Large Milk Tea'
-    if (queryLower.includes('coffee')) item = 'Large Coffee'
-    if (queryLower.includes('tea')) item = 'Large Milk Tea'
-    
-    return {
-      intent_type: 'purchase',
-      amount: '0.1',
-      redirect_url: `https://anyone-pay.vercel.app/receipt?item=${encodeURIComponent(item.toLowerCase().replace(/\s+/g, '-'))}&token=intent-${Date.now()}`,
-      metadata: { item },
-    }
-  }
-  
-  // Default generic intent
-  return {
-    intent_type: 'generic',
-    amount: '0.1',
-    redirect_url: `https://anyone-pay.vercel.app/content?token=intent-${Date.now()}`,
-    metadata: { query },
-  }
+  chain?: string
+  needsBridge?: boolean
+  bridgeFrom?: string
+  bridgeTo?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -128,9 +24,50 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // In production, you could integrate NearAI LangChain here
-    // For now, use the enhanced fallback parser
-    const parsed = parseIntentFallback(query)
+    // Use NEAR AI Cloud to analyze the prompt
+    const analyzed = await analyzePromptWithNearAI(query)
+    
+    // Detect chain for domain if recipient is a domain
+    let targetChain = analyzed.chain
+    if (analyzed.recipient && analyzed.recipient.includes('.')) {
+      targetChain = await detectChainForDomain(analyzed.recipient)
+    }
+    
+    // Build redirect URL using resource key (data drop)
+    // The URL will trigger the Intent Solver to handle X402 payment and data retrieval
+    const redirectUrl = analyzed.resourceKey
+      ? `/intent/${analyzed.resourceKey}`
+      : analyzed.redirectUrl || analyzed.recipient
+      ? analyzed.recipient?.startsWith('http')
+        ? analyzed.recipient
+        : `https://${analyzed.recipient}?amount=${analyzed.amount}&token=intent-${Date.now()}`
+      : `/content?token=intent-${Date.now()}`
+    
+    // Use service redirect URL if available
+    const finalRedirectUrl = analyzed.redirectUrl || redirectUrl
+
+    const parsed: ParsedIntent = {
+      intent_type: 'payment',
+      amount: analyzed.amount,
+      redirect_url: finalRedirectUrl,
+      metadata: {
+        action: analyzed.action,
+        recipient: analyzed.recipient,
+        currency: analyzed.currency,
+        chain: targetChain,
+        needsBridge: analyzed.needsBridge,
+        bridgeFrom: analyzed.bridgeFrom,
+        bridgeTo: analyzed.bridgeTo || targetChain,
+        serviceId: analyzed.serviceId,
+        serviceName: analyzed.serviceName,
+        resourceKey: analyzed.resourceKey,
+        contractId: analyzed.contractId,
+      },
+      chain: targetChain,
+      needsBridge: analyzed.needsBridge,
+      bridgeFrom: analyzed.bridgeFrom,
+      bridgeTo: analyzed.bridgeTo || targetChain,
+    }
     
     return NextResponse.json(parsed)
   } catch (error) {

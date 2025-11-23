@@ -25,7 +25,7 @@ export function IntentsQR({ depositAddress, amount }: IntentsQRProps) {
           Deposit Zcash
         </h2>
         <p className="text-sm text-gray-400">
-          Deposit <span className="text-purple-400 font-medium">{amount} Zcash</span> to continue
+          Deposit <span className="text-purple-400 font-medium">{amount} ZEC</span> to continue
         </p>
       </div>
       
@@ -40,16 +40,20 @@ export function IntentsQR({ depositAddress, amount }: IntentsQRProps) {
         </div>
         
         <div className="w-full space-y-2">
+          <div className="text-center">
+            <p className="text-xs text-gray-500 mb-2">Zcash Deposit Address</p>
+          </div>
           <div className="flex items-center gap-2">
             <input
               type="text"
               value={depositAddress}
               readOnly
-              className="flex-1 px-3 py-2 text-xs font-mono bg-gray-900/50 border border-gray-700/50 rounded-lg text-gray-300 truncate focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+              className="flex-1 px-3 py-2 text-xs font-mono bg-gray-900/50 border border-gray-700/50 rounded-lg text-gray-300 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+              style={{ wordBreak: 'break-all' }}
             />
             <button
               onClick={handleCopy}
-              className="px-3 py-2 bg-gray-700/50 hover:bg-gray-700 border border-gray-600/50 rounded-lg transition-colors"
+              className="px-3 py-2 bg-gray-700/50 hover:bg-gray-700 border border-gray-600/50 rounded-lg transition-colors flex-shrink-0"
             >
               {copied ? (
                 <Check className="w-4 h-4 text-green-400" />
@@ -58,6 +62,9 @@ export function IntentsQR({ depositAddress, amount }: IntentsQRProps) {
               )}
             </button>
           </div>
+          <p className="text-xs text-gray-500 text-center mt-2">
+            Send ZEC to this shielded address
+          </p>
         </div>
       </div>
     </div>

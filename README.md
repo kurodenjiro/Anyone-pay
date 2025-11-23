@@ -1,8 +1,8 @@
 # Anyone Pay
 
-**The ultimate real-world x402 + NEAR Intents app**
+**The ultimate real-world x402 + NEAR Intents app with Encrypted Data Drop**
 
-Built live for you by Grok – NEAR Intents Deposit Flow
+Built live for you by Grok – NEAR Intents Deposit Flow with AI-Powered Semantic Search
 
 ## 🌐 Live URL
 
@@ -13,26 +13,48 @@ Built live for you by Grok – NEAR Intents Deposit Flow
 ## 🚀 Features
 
 - **AI-Native UI**: Full-screen ambient gradient background with floating input that appears on click
-- **NEAR Intents Integration**: Generate QR codes for deposit addresses using NEAR Intents SDK
-- **Intent Execution Flow**: Beautiful animated diagram showing deposit → funding → swap → x402 payment → content unlock
+- **NEAR AI Cloud Integration**: Uses [NEAR AI Cloud](https://docs.near.ai/cloud/get-started/) to analyze prompts and determine intent flow
+- **AI-Powered Semantic Search**: Uses OpenAI embeddings + Supabase vector search to match user queries to services. Only returns matches above similarity threshold - if it doesn't match, it won't be found.
+- **Encrypted Data Drop**: No direct URLs stored - uses resource keys (Public Key A) with NEAR Intents
+- **X402 Payment Standard**: HTTP 402 payment required integration with automatic payment execution
+- **Supabase Storage**: All payment services stored in Supabase with vector embeddings for semantic search
+- **NEAR Intents Integration**: Generate QR codes for Zcash deposit addresses
+- **Intent Execution Flow**: Beautiful animated diagram showing:
+  1. NEAR AI analyzes intent
+  2. Create Zcash deposit address
+  3. Scan QR & deposit Zcash
+  4. Bridge Zcash to target chain (if needed)
+  5. Intent funding complete
+  6. Content unlock via Data Drop
 - **Real x402 Payments**: Integrated with Coinbase Facilitator for USDC payments
+- **Public Service Creation**: Anyone can create payment services without authentication
 - **Multiple Intent Types**:
+  - Payment intents with Encrypted Data Drop
   - Weather forecasts (10-day premium data)
   - AI image generation
-  - **Cross-chain token swaps** (NEAR ↔ USDC via 1-Click API & NEAR Intents)
+  - **Cross-chain token swaps** (Zcash ↔ USDC via 1-Click API & NEAR Intents)
   - Purchase intents (milk tea example)
-- **Real NEAR Intents Integration**: Uses [1-Click SDK](https://github.com/near-examples/near-intents-examples) for actual deposit addresses and swap execution
+- **Chain Detection**: Automatically detects which blockchain a domain/content is on
+- **Automatic Bridging**: Bridges Zcash to target chain when needed
 
 ## 🏗️ Architecture
 
 ```
 ├── app/                  # Next.js 15 App Router
-│   └── api/              # API routes
-│       ├── parse-intent/ # Intent parsing
-│       └── relayer/      # Relayer endpoints (register, check, poll, get-tokens)
-├── components/           # React components (FloatingInput, IntentsQR, IntentFlowDiagram)
+│   ├── api/              # API routes
+│   │   ├── parse-intent/ # Intent parsing with NEAR AI
+│   │   ├── services/    # Service management (CRUD)
+│   │   ├── intent/      # Intent execution with X402
+│   │   └── relayer/      # Relayer endpoints
+│   └── intent/          # Intent execution page
+├── components/           # React components
 ├── contract/             # Rust smart contract (NEAR SDK)
-└── lib/                  # Utilities (intent parser, NEAR connection, 1-Click SDK, deposit tracking)
+├── lib/                  # Utilities
+│   ├── dataDrop.ts      # Encrypted Data Drop management
+│   ├── serviceRegistry.ts # Service registry with semantic search
+│   ├── nearAI.ts        # NEAR AI Cloud integration
+│   └── supabase.ts      # Supabase client
+└── supabase-setup.sql   # Database schema
 ```
 
 ## 🛠️ Tech Stack
@@ -42,16 +64,23 @@ Built live for you by Grok – NEAR Intents Deposit Flow
 - **1-Click SDK**: [@defuse-protocol/one-click-sdk-typescript](https://github.com/near-examples/near-intents-examples) for cross-chain swaps
 - **Smart Contract**: Rust + NEAR SDK
 - **Relayer**: Next.js API Routes (integrated with 1-Click API)
-- **AI Agent**: Next.js API Routes (integrated)
-- **Deployment**: Vercel (frontend + API + Cron Jobs), NEAR testnet (contract)
+- **AI Agent**: Next.js API Routes with NEAR AI Cloud integration for prompt analysis
+- **Database**: Supabase (PostgreSQL with pgvector for semantic search)
+- **Semantic Search**: OpenAI embeddings + Supabase vector similarity search
+- **Data Drop**: Encrypted Data Drop with resource keys (no direct URLs)
+- **Deployment**: Vercel (frontend + API + Cron Jobs), NEAR testnet (contract), Supabase (database)
 
 ## 📦 Setup
 
 ### Prerequisites
 
-- Node.js 20+
-- Rust (for contract compilation)
-- NEAR CLI
+- Node.js 18+ and npm
+- NEAR AI Cloud API key ([Get one here](https://cloud.near.ai) - see [setup guide](https://docs.near.ai/cloud/get-started/#quick-setup))
+- OpenAI API key ([Get one here](https://platform.openai.com/api-keys)) - Required for semantic search embeddings
+- Supabase account ([Sign up here](https://supabase.com)) - Required for service storage
+- NEAR testnet account (optional, for contract deployment)
+- Rust (for contract compilation, optional)
+- NEAR CLI (optional, for contract deployment)
 
 ### 1. Install Dependencies
 
@@ -78,7 +107,20 @@ cd contract
 near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.testnet
 ```
 
-### 3. Environment Variables
+### 3. Supabase Setup
+
+1. Create a Supabase project at https://supabase.com
+2. Run the SQL setup script:
+   - Go to SQL Editor in your Supabase dashboard
+   - Copy and paste the contents of `supabase-setup.sql`
+   - Click Run to execute
+3. Get your Supabase credentials:
+   - Go to Settings > API
+   - Copy your Project URL and anon key
+
+See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for detailed instructions.
+
+### 4. Environment Variables
 
 Create `.env.local`:
 
@@ -88,124 +130,65 @@ NEXT_PUBLIC_CONTRACT_ID=anyone-pay.testnet
 NEXT_PUBLIC_INTENTS_CONTRACT=intents.testnet
 X402_FACILITATOR=x402.near
 
+# NEAR AI Cloud API Key (required for prompt analysis)
+# Get your API key from https://cloud.near.ai
+# See https://docs.near.ai/cloud/get-started/#quick-setup for setup instructions
+NEAR_AI_API_KEY=your-near-ai-api-key-here
+
+# OpenAI API Key (required for semantic search embeddings)
+# Get your API key from https://platform.openai.com/api-keys
+# This is used to generate embeddings for semantic search in Supabase
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Supabase Configuration (required for service storage and semantic search)
+# Get these from your Supabase project: Settings > API
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key-here
+
+# Data Drop Smart Contract (required for Encrypted Data Drop)
+NEXT_PUBLIC_DATA_DROP_CONTRACT=data-drop.testnet
+
 # Optional: 1-Click API JWT (without JWT incurs 0.1% fee on swaps)
 # Request JWT here: https://1click.fi
 ONE_CLICK_JWT=your_jwt_token_here
 ONE_CLICK_API_URL=https://api.1click.fi
 ```
 
-### 4. Run Locally
+### 5. Run Locally
 
 ```bash
-# Frontend
 npm run dev
 ```
 
+Visit http://localhost:3000
+
+## 📚 Documentation
+
+- [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) - Supabase setup guide
+- [DATA_DROP_INTEGRATION.md](./DATA_DROP_INTEGRATION.md) - Encrypted Data Drop integration details
+- [DEPLOY_CONTRACT.md](./DEPLOY_CONTRACT.md) - Contract deployment guide
+
+## 🔐 Security
+
+- **No Direct URLs**: Services use resource keys (Public Key A) instead of direct URLs
+- **Encrypted Private Keys**: Private Key A should be encrypted before storing (TODO)
+- **X402 Payment Verification**: Payment verified before data retrieval
+- **Semantic Search Threshold**: Only returns matches above similarity threshold (default: 0.7)
+
 ## 🎯 Usage
 
-1. **Click anywhere** on the screen to reveal the floating input
-2. **Type your request** (e.g., "10-day weather forecast for Tokyo" or "Swap 2 NEAR to USDC")
-3. **Press Enter** to submit
-4. **Scan QR code** or copy deposit address to send NEAR
-5. **Watch the flow** as your intent executes:
-   - Deposit to NEAR Intents Address (real address from 1-Click API for swaps)
-   - Intent Funding
-   - Cross-Chain Swap (if needed, via 1-Click API)
-   - x402 Payment (USDC)
-   - Content Unlock
-6. **Automatic redirect** to premium content with access token
+1. **Create a Service**: Click "Or create a new payment service" on homepage
+2. **Search for Service**: Type a query like "Pay ticket move Kiki deliver series"
+3. **AI Semantic Search**: System finds matching service using embeddings
+4. **Generate Intent**: Creates NEAR Intent with resource key
+5. **X402 Payment**: If payment required, Intent Solver handles it
+6. **Data Retrieval**: Solver executes `claim_data()` using Private Key A
+7. **Access Content**: Decrypted data returned to user
 
-## 🔄 Intent Flow
+## 🤝 Contributing
 
-```
-User Query
-    ↓
-Next.js API Routes (parse intent)
-    ↓
-Generate NEAR Intents Deposit Address
-    ↓
-  - For swaps: Get real deposit address from 1-Click API
-  - For others: Generate mock address
-    ↓
-Display QR Code + Flow Diagram
-    ↓
-User Deposits NEAR (via wallet scan/transfer)
-    ↓
-Relayer Polls for Deposit Confirmation
-    ↓
-  - Check swap status via 1-Click API (if swap intent)
-  - Or check NEAR Intents contract
-    ↓
-Mark Intent as Funded (contract)
-    ↓
-Execute x402 Payment (USDC via Coinbase Facilitator)
-    ↓
-Generate Access Token
-    ↓
-Redirect to Premium Content URL
-```
-
-## 🧪 Testnet Features
-
-- Auto-faucet: 10 NEAR on first wallet connect (testnet only)
-- Real 1-Click API integration for cross-chain swaps
-- Testnet contract deployment ready
-
-## 📝 Example Queries
-
-- `"10-day weather forecast for Tokyo"`
-- `"Generate an image of a cyberpunk dragon"`
-- `"Swap 2 NEAR to USDC"` - **Uses real 1-Click API for cross-chain swap**
-- `"Buy me a large milk tea"`
-
-## 🚢 Deployment
-
-### Frontend (Vercel)
-
-```bash
-vercel --prod
-```
-
-### Relayer (Integrated)
-
-The relayer is now part of Next.js API routes and deploys automatically with Vercel. No separate deployment needed!
-
-### Contract (NEAR)
-
-```bash
-cd contract
-near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.testnet
-```
-
-## 📚 API Endpoints
-
-### Intent Parsing
-- `POST /api/parse-intent` - Parse user queries into structured intents
-
-### Relayer
-- `POST /api/relayer/register-deposit` - Register deposit addresses (uses 1-Click API for swaps)
-- `POST /api/relayer/check-deposit` - Check deposit status (uses 1-Click API for swap status)
-- `GET /api/relayer/poll-deposits` - Poll for confirmations (called by Vercel Cron)
-- `GET /api/relayer/access-token/[intentId]` - Generate access tokens
-- `GET /api/relayer/get-tokens` - Get available tokens from 1-Click API
-- `GET /api/relayer/health` - Health check
-
-## 🔗 Resources
-
-- [NEAR Intents Examples](https://github.com/near-examples/near-intents-examples) - Educational examples we integrated
-- [1-Click API Docs](https://1click.fi)
-- [1-Click TypeScript SDK](https://github.com/near-examples/near-intents-examples)
-- [NEAR Intents Explorer](https://explorer.near-intents.org)
-- [NEAR Protocol Documentation](https://docs.near.org)
+This is a production-ready app. Feel free to fork and customize!
 
 ## 📄 License
 
 MIT
-
-## 🙏 Credits
-
-Built with NEAR Protocol, x402, NEAR Intents SDK, and [1-Click API](https://github.com/near-examples/near-intents-examples).
-
----
-
-**Live at: https://anyone-pay.vercel.app**
