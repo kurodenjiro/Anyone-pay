@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id')
 
     if (id) {
-      // Get specific service by ID
+      // Get specific service by ID (URL included for payment flow)
       const service = await getServiceById(id)
       if (!service) {
         return NextResponse.json(
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
           { status: 404 }
         )
       }
+      // Include URL only when fetching by ID (for payment flow)
       return NextResponse.json(service)
     }
 
@@ -33,12 +34,16 @@ export async function GET(request: NextRequest) {
       // Search services using semantic search
       // Only returns services that match above threshold
       const results = await searchServicesSemantic(query, 0.7)
-      return NextResponse.json({ services: results, query })
+      // Remove URL from response for security
+      const resultsWithoutUrl = results.map(({ url, ...service }) => service)
+      return NextResponse.json({ services: resultsWithoutUrl, query })
     }
 
-    // Get all services
+    // Get all services (hide URL from public API)
     const services = await getAllServices()
-    return NextResponse.json({ services })
+    // Remove URL from response for security
+    const servicesWithoutUrl = services.map(({ url, ...service }) => service)
+    return NextResponse.json({ services: servicesWithoutUrl })
   } catch (error) {
     console.error('Error getting services:', error)
     return NextResponse.json(
@@ -52,11 +57,35 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, keywords, amount, currency, contractId, chain, description } = body
+    const { name, keywords, amount, currency, url, chain, receivingAddress, description } = body
 
-    if (!name || !keywords || !amount || !chain) {
+    if (!name || !keywords || !amount || !url || !chain) {
       return NextResponse.json(
-        { error: 'Missing required fields: name, keywords, amount, chain' },
+        { error: 'Missing required fields: name, keywords, amount, url, chain' },
+        { status: 400 }
+      )
+    }
+
+    // Validate currency is USDC
+    if (currency !== 'USDC') {
+      return NextResponse.json(
+        { error: 'Only USDC currency is supported' },
+        { status: 400 }
+      )
+    }
+
+    // Validate chain is Base or Solana
+    if (chain !== 'base' && chain !== 'solana') {
+      return NextResponse.json(
+        { error: 'Only Base and Solana chains are supported' },
+        { status: 400 }
+      )
+    }
+
+    // Validate receiving address is required
+    if (!receivingAddress) {
+      return NextResponse.json(
+        { error: 'Receiving address is required' },
         { status: 400 }
       )
     }
@@ -65,9 +94,10 @@ export async function POST(request: NextRequest) {
       name,
       keywords: Array.isArray(keywords) ? keywords : [keywords],
       amount,
-      currency: currency || 'USD',
-      contractId: contractId || process.env.NEXT_PUBLIC_DATA_DROP_CONTRACT || 'data-drop.testnet',
+      currency: currency || 'USDC',
+      url,
       chain,
+      receivingAddress,
       description,
       active: true,
     })

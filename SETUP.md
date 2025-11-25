@@ -34,9 +34,9 @@ Edit `.env.local` with your configuration:
 
 ```env
 # NEAR Configuration
-NEXT_PUBLIC_NEAR_NETWORK=testnet
-NEXT_PUBLIC_CONTRACT_ID=anyone-pay.testnet
-NEXT_PUBLIC_INTENTS_CONTRACT=intents.testnet
+NEXT_PUBLIC_NEAR_NETWORK=mainnet
+NEXT_PUBLIC_CONTRACT_ID=anyone-pay.near
+NEXT_PUBLIC_INTENTS_CONTRACT=intents.near
 X402_FACILITATOR=x402.near
 
 # Optional: 1-Click API JWT (without JWT incurs 0.1% fee on swaps)
@@ -60,7 +60,7 @@ If you want to deploy the smart contract:
 # Install NEAR CLI
 npm install -g near-cli
 
-# Login to testnet
+# Login to mainnet
 near login
 
 # Build contract
@@ -68,7 +68,7 @@ cd contract
 cargo build --target wasm32-unknown-unknown --release
 
 # Deploy
-near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.testnet
+near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.near
 ```
 
 ## Troubleshooting

@@ -40,7 +40,7 @@ impl Default for AnyonePay {
         Self {
             intents: UnorderedMap::new(b"i".to_vec()),
             x402_facilitator: AccountId::try_from("x402.near".to_string()).unwrap(),
-            intents_contract: AccountId::try_from("intents.testnet".to_string()).unwrap(),
+            intents_contract: AccountId::try_from("intents.near".to_string()).unwrap(),
         }
     }
 }

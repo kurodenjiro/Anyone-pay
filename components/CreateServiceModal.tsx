@@ -15,9 +15,10 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
     name: '',
     keywords: '',
     amount: '',
-    currency: 'USD',
-    contractId: '', // Data Drop Smart Contract address
-    chain: 'ethereum',
+    currency: 'USDC',
+    url: '', // Direct URL to content/service
+    chain: 'base',
+    receivingAddress: '',
     description: '',
   })
   const [loading, setLoading] = useState(false)
@@ -37,8 +38,9 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
           keywords,
           amount: formData.amount,
           currency: formData.currency,
-          contractId: formData.contractId || 'data-drop.testnet',
+          url: formData.url,
           chain: formData.chain,
+          receivingAddress: formData.receivingAddress,
           description: formData.description,
         }),
       })
@@ -56,9 +58,10 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
         name: '',
         keywords: '',
         amount: '',
-        currency: 'USD',
-        contractId: '',
-        chain: 'ethereum',
+        currency: 'USDC',
+        url: '',
+        chain: 'base',
+        receivingAddress: '',
         description: '',
       })
 
@@ -152,32 +155,32 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
                     <label className="block text-sm font-medium text-gray-300 mb-1">
                       Currency *
                     </label>
-                    <select
-                      value={formData.currency}
-                      onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      <option value="USD">USD</option>
-                      <option value="NEAR">NEAR</option>
-                      <option value="USDC">USDC</option>
-                    </select>
+                    <input
+                      type="text"
+                      value="USDC"
+                      disabled
+                      className="w-full px-4 py-2 bg-gray-600 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Only USDC payments are supported
+                    </p>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Data Drop Contract ID *
+                    Content URL *
                   </label>
                   <input
-                    type="text"
-                    value={formData.contractId}
-                    onChange={(e) => setFormData({ ...formData, contractId: e.target.value })}
+                    type="url"
+                    value={formData.url}
+                    onChange={(e) => setFormData({ ...formData, url: e.target.value })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="data-drop.testnet"
+                    placeholder="https://example.com/content"
                     required
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    The Data Drop Smart Contract address. A resource key will be auto-generated.
+                    Direct URL to the content or service that will be unlocked after payment
                   </p>
                 </div>
 
@@ -190,12 +193,35 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
                     onChange={(e) => setFormData({ ...formData, chain: e.target.value })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="ethereum">Ethereum</option>
-                    <option value="near">NEAR</option>
+                    <option value="base">Base</option>
                     <option value="solana">Solana</option>
-                    <option value="polygon">Polygon</option>
-                    <option value="arbitrum">Arbitrum</option>
                   </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Only Base and Solana are supported
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Receiving Address *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.receivingAddress}
+                    onChange={(e) => setFormData({ ...formData, receivingAddress: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder={
+                      formData.chain === 'base' 
+                        ? '0x...' 
+                        : 'Solana wallet address...'
+                    }
+                    required
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {formData.chain === 'base' 
+                      ? 'Base network wallet address (0x...)'
+                      : 'Solana wallet address'}
+                  </p>
                 </div>
 
                 <div>

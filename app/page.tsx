@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AmbientBackground } from '@/components/AmbientBackground'
 import { FloatingInput } from '@/components/FloatingInput'
@@ -8,9 +9,26 @@ import { IntentsQR } from '@/components/IntentsQR'
 import { IntentFlowDiagram } from '@/components/IntentFlowDiagram'
 import { WalletProvider } from '@/components/WalletProvider'
 import { CreateServiceModal } from '@/components/CreateServiceModal'
+import { ServicesList } from '@/components/ServicesList'
 import { parseIntent } from '@/lib/intentParser'
 
 export default function Home() {
+  return (
+    <WalletProvider>
+      <Suspense fallback={
+        <main className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+        </main>
+      }>
+        <HomeContent />
+      </Suspense>
+    </WalletProvider>
+  )
+}
+
+function HomeContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [showInput, setShowInput] = useState(false)
   const [query, setQuery] = useState('')
   const [intentData, setIntentData] = useState<{
@@ -21,45 +39,174 @@ export default function Home() {
     chain?: string
     needsBridge?: boolean
     bridgeTo?: string
+    serviceName?: string
+    receivingAddress?: string
+    currency?: string
+    aiMessage?: string
   } | null>(null)
   const [showFlow, setShowFlow] = useState(false)
   const [depositConfirmed, setDepositConfirmed] = useState(false)
   const [showCreateService, setShowCreateService] = useState(false)
+  const [servicesKey, setServicesKey] = useState(0) // Force re-render when service is created
+  const [isLoading, setIsLoading] = useState(false) // Loading state for prompt processing
 
   useEffect(() => {
-    // Auto-show input after a brief delay for first load (only if no intent data)
-    if (!intentData) {
+    // Check if service ID is in URL
+    const serviceId = searchParams.get('service')
+    if (serviceId && !intentData) {
+      // Load service from URL
+      loadServiceFromId(serviceId)
+    } else if (!intentData) {
+      // Auto-show input after a brief delay for first load (only if no intent data)
       const timer = setTimeout(() => {
         setShowInput(true)
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [intentData])
+  }, [searchParams, intentData])
+
+  const loadServiceFromId = async (serviceId: string) => {
+    try {
+      const response = await fetch(`/api/services?id=${serviceId}`)
+      const fullService = await response.json()
+      
+      // Create intent with service data
+      const amount = fullService.amount || '0.1'
+      const { depositAddress, intentId } = await generateDepositAddress(
+        'payment',
+        amount,
+        {
+          type: 'payment',
+          amount,
+          redirectUrl: fullService.url,
+          chain: fullService.chain,
+          metadata: {
+            serviceId: fullService.id,
+            serviceName: fullService.name,
+            chain: fullService.chain,
+          }
+        }
+      )
+      
+      setIntentData({
+        type: 'payment',
+        depositAddress,
+        amount,
+        redirectUrl: fullService.url,
+        chain: fullService.chain,
+        needsBridge: true,
+        bridgeFrom: 'zcash',
+        bridgeTo: fullService.chain,
+        serviceName: fullService.name,
+        receivingAddress: fullService.receivingAddress,
+        currency: fullService.currency,
+      })
+      setShowFlow(true)
+      
+      // Start polling for deposit confirmation
+      pollDepositConfirmation(depositAddress)
+    } catch (error) {
+      console.error('Error loading service from URL:', error)
+    }
+  }
+
+  // Check if payment data is complete
+  const isPaymentDataComplete = (
+    amount?: string,
+    currency?: string,
+    chain?: string,
+    receivingAddress?: string
+  ): boolean => {
+    return !!(
+      amount && 
+      parseFloat(amount) > 0 &&
+      currency === 'USDC' &&
+      (chain === 'base' || chain === 'solana') &&
+      receivingAddress &&
+      receivingAddress.length > 0
+    )
+  }
 
   const handleSubmit = async (text: string) => {
     setQuery(text)
+    setIsLoading(true) // Show loading state
     // Keep input visible - don't hide it
 
-    // Parse intent using Next.js API route
-    const parsed = await parseIntent(text)
-    const amount = parsed.amount || '0.1'
-    
-    // Generate deposit address using NEAR Intents SDK / 1-Click API
-    const { depositAddress, intentId } = await generateDepositAddress(parsed.type, amount, parsed)
-    
-    setIntentData({
-      type: parsed.type,
-      depositAddress,
-      amount,
-      redirectUrl: parsed.redirectUrl || '',
-      chain: parsed.chain || parsed.metadata?.chain,
-      needsBridge: parsed.needsBridge ?? parsed.metadata?.needsBridge,
-      bridgeTo: parsed.bridgeTo || parsed.metadata?.bridgeTo,
-    })
-    setShowFlow(true)
+    try {
+      // Parse intent using Next.js API route
+      const parsed = await parseIntent(text)
+      const amount = parsed.amount || ''
+      const currency = parsed.metadata?.currency || ''
+      const chain = parsed.chain || parsed.metadata?.chain || ''
+      const receivingAddress = parsed.metadata?.receivingAddress || ''
+      
+      // Normalize currency to USDC if it's USDT or any USD variant
+      const normalizedCurrency = (currency && (currency.toUpperCase() === 'USDT' || currency.toUpperCase().includes('USD'))) 
+        ? 'USDC' 
+        : currency
+      
+      // Check if payment data is complete (use normalized currency)
+      const isComplete = isPaymentDataComplete(amount, normalizedCurrency, chain, receivingAddress)
+      
+      // Check if there's a currency conversion message
+      const hasCurrencyConversion = parsed.aiMessage && parsed.aiMessage.includes('converted')
+      
+      if (isComplete && (!parsed.aiMessage || hasCurrencyConversion)) {
+        // Full payment data available - generate QR code
+        // If there was a currency conversion, we'll show it briefly but still generate QR
+        const { depositAddress, intentId } = await generateDepositAddress(parsed.type, amount, parsed)
+        
+        setIntentData({
+          type: parsed.type,
+          depositAddress,
+          amount,
+          redirectUrl: parsed.redirect_url || '',
+          chain: parsed.chain || parsed.metadata?.chain,
+          needsBridge: parsed.needsBridge ?? parsed.metadata?.needsBridge,
+          bridgeTo: parsed.bridgeTo || parsed.metadata?.bridgeTo,
+          serviceName: parsed.metadata?.serviceName,
+          receivingAddress: parsed.metadata?.receivingAddress,
+          currency: normalizedCurrency || 'USDC',
+          // Show currency conversion message if present, but still allow QR generation
+          aiMessage: hasCurrencyConversion ? parsed.aiMessage : undefined,
+        })
+        setShowFlow(true)
 
-    // Start polling for deposit confirmation
-    pollDepositConfirmation(depositAddress)
+        // Start polling for deposit confirmation
+        pollDepositConfirmation(depositAddress)
+      } else {
+        // Incomplete data - show AI message
+        setIntentData({
+          type: parsed.intent_type || 'payment',
+          depositAddress: '', // No deposit address for incomplete data
+          amount: amount || '',
+          redirectUrl: '',
+          chain: chain || '',
+          needsBridge: false,
+          serviceName: parsed.metadata?.serviceName,
+          receivingAddress: receivingAddress || '',
+          currency: normalizedCurrency || '',
+          aiMessage: parsed.aiMessage || "I'd be happy to help you make a payment! To proceed, I need: the amount (e.g., 0.1 USDC), the target network (Base or Solana), and the payment address. Could you provide these details?",
+        })
+        setShowFlow(false) // Don't show flow for incomplete data
+      }
+    } catch (error) {
+      console.error('Error processing intent:', error)
+      // Show error message
+      setIntentData({
+        type: 'payment',
+        depositAddress: '',
+        amount: '',
+        redirectUrl: '',
+        chain: '',
+        needsBridge: false,
+        currency: '',
+        aiMessage: "Sorry, I encountered an error processing your request. Please try again.",
+      })
+      setShowFlow(false)
+    } finally {
+      setIsLoading(false) // Hide loading state
+    }
   }
 
   const generateDepositAddress = async (
@@ -167,7 +314,6 @@ export default function Home() {
   }
 
   return (
-    <WalletProvider>
       <main 
         className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900"
         onClick={handleClickAnywhere}
@@ -187,11 +333,53 @@ export default function Home() {
               show={showInput}
               onSubmit={handleSubmit}
               onClose={() => setShowInput(false)}
+              loading={isLoading}
+              value={query}
+              onChange={setQuery}
             />
           </div>
 
-          {/* QR Code - second component */}
-          {intentData && showFlow && (
+          {/* Services List - show below input when no intent data */}
+          {!intentData && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="w-full"
+            >
+              <ServicesList
+                key={servicesKey}
+                onServiceClick={(service) => {
+                  // Change URL to include service ID
+                  router.push(`/?service=${service.id}`, { scroll: false })
+                }}
+              />
+            </motion.div>
+          )}
+
+          {/* AI Message - show when data is incomplete OR when currency conversion happens */}
+          {intentData && intentData.aiMessage && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 shadow-xl shadow-purple-500/10"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                  <span className="text-purple-400 text-lg">💬</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-white text-sm leading-relaxed">
+                    {intentData.aiMessage}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* QR Code - second component (only show when payment data is complete) */}
+          {intentData && showFlow && intentData.depositAddress && !intentData.aiMessage && (
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -218,6 +406,11 @@ export default function Home() {
                 chain={intentData.chain}
                 needsBridge={intentData.needsBridge}
                 bridgeTo={intentData.bridgeTo}
+                serviceName={intentData.serviceName}
+                receivingAddress={intentData.receivingAddress}
+                amount={intentData.amount}
+                currency={intentData.currency}
+                depositAddress={intentData.depositAddress}
               />
             </motion.div>
           )}
@@ -262,10 +455,11 @@ export default function Home() {
           onClose={() => setShowCreateService(false)}
           onServiceCreated={() => {
             console.log('Service created successfully!')
+            // Refresh services list
+            setServicesKey(prev => prev + 1)
           }}
         />
       </main>
-    </WalletProvider>
   )
 }
 

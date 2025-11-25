@@ -3,7 +3,6 @@
 
 import { supabase } from './supabase'
 import OpenAI from 'openai'
-import { generateDataDrop, storeDataDrop } from './dataDrop'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.NEAR_AI_API_KEY || '',
@@ -15,16 +14,14 @@ export interface PaymentService {
   keywords: string[]
   amount: string
   currency: string
-  resourceKey: string  // Public Key A (Linkdrop Key) instead of direct URL
-  contractId: string  // Data Drop Smart Contract address
+  url: string  // Direct URL to content/service
   chain: string
+  receivingAddress?: string  // Receiving address for Base, Solana, and USDC
   description?: string
   active: boolean
   embedding?: number[]
   created_at?: string
   updated_at?: string
-  // Legacy support - will be migrated to resourceKey
-  url?: string
 }
 
 /**
@@ -86,8 +83,9 @@ export async function searchServicesSemantic(query: string, threshold: number = 
       keywords: row.keywords || [],
       amount: row.amount,
       currency: row.currency,
-      url: row.url,
+      url: row.url || row.resource_key, // Support both url and resource_key (legacy)
       chain: row.chain,
+      receivingAddress: row.receiving_address,
       description: row.description,
       active: row.active,
     }))
@@ -149,10 +147,9 @@ async function searchServicesKeyword(query: string): Promise<PaymentService[]> {
       keywords: result.service.keywords || [],
       amount: result.service.amount,
       currency: result.service.currency,
-      resourceKey: result.service.resource_key || result.service.url,
-      contractId: result.service.contract_id || 'data-drop.testnet',
-      url: result.service.url,
+      url: result.service.url || result.service.resource_key, // Support both
       chain: result.service.chain,
+      receivingAddress: result.service.receiving_address,
       description: result.service.description,
       active: result.service.active,
     }))
@@ -199,10 +196,9 @@ export async function getServiceById(id: string): Promise<PaymentService | null>
       keywords: data.keywords || [],
       amount: data.amount,
       currency: data.currency,
-      resourceKey: data.resource_key || data.url,
-      contractId: data.contract_id || 'data-drop.testnet',
-      url: data.url,
+      url: data.url || data.resource_key, // Support both
       chain: data.chain,
+      receivingAddress: data.receiving_address,
       description: data.description,
       active: data.active,
     }
@@ -237,10 +233,9 @@ export async function getAllServices(): Promise<PaymentService[]> {
       keywords: row.keywords || [],
       amount: row.amount,
       currency: row.currency,
-      resourceKey: row.resource_key || row.url, // Support both new and legacy
-      contractId: row.contract_id || 'data-drop.testnet', // Default contract
-      url: row.url, // Legacy support
+      url: row.url || row.resource_key, // Support both url and resource_key (legacy)
       chain: row.chain,
+      receivingAddress: row.receiving_address,
       description: row.description,
       active: row.active,
     }))
@@ -251,12 +246,10 @@ export async function getAllServices(): Promise<PaymentService[]> {
 }
 
 /**
- * Add a new service with embedding and data drop
+ * Add a new service with embedding
  */
 export async function addService(
-  service: Omit<PaymentService, 'id' | 'embedding' | 'created_at' | 'updated_at' | 'resourceKey' | 'contractId'> & {
-    contractId?: string  // Optional, will use default if not provided
-  }
+  service: Omit<PaymentService, 'id' | 'embedding' | 'created_at' | 'updated_at'>
 ): Promise<PaymentService> {
   if (!supabase) {
     throw new Error('Supabase not configured')
@@ -265,13 +258,6 @@ export async function addService(
   // Generate embedding for semantic search
   const searchText = `${service.name} ${service.description || ''} ${service.keywords.join(' ')}`
   const embedding = await generateEmbedding(searchText)
-
-  // Generate data drop for this service
-  const contractId = service.contractId || process.env.NEXT_PUBLIC_DATA_DROP_CONTRACT || 'data-drop.testnet'
-  const dataDrop = await generateDataDrop(contractId, {
-    amount: service.amount,
-    token: service.currency === 'NEAR' ? 'NEAR' : service.currency === 'USDC' ? 'USDC' : 'DATA_TOKEN',
-  })
 
   try {
     // Insert service
@@ -282,9 +268,9 @@ export async function addService(
         keywords: service.keywords,
         amount: service.amount,
         currency: service.currency,
-        resource_key: dataDrop.resourceKey, // Store resource key instead of URL
-        contract_id: contractId,
+        url: service.url,
         chain: service.chain,
+        receiving_address: service.receivingAddress,
         description: service.description,
         active: service.active !== false,
         embedding: embedding,
@@ -296,18 +282,15 @@ export async function addService(
       throw error
     }
 
-    // Store data drop
-    await storeDataDrop(data.id, dataDrop)
-
     return {
       id: data.id,
       name: data.name,
       keywords: data.keywords || [],
       amount: data.amount,
       currency: data.currency,
-      resourceKey: data.resource_key,
-      contractId: data.contract_id,
+      url: data.url || data.resource_key, // Support both
       chain: data.chain,
+      receivingAddress: data.receiving_address,
       description: data.description,
       active: data.active,
     }
@@ -335,7 +318,15 @@ export async function updateService(id: string, updates: Partial<PaymentService>
   }
 
   try {
-    const updateData: any = { ...updates }
+    const updateData: any = {}
+    if (updates.name) updateData.name = updates.name
+    if (updates.keywords) updateData.keywords = updates.keywords
+    if (updates.amount) updateData.amount = updates.amount
+    if (updates.currency) updateData.currency = updates.currency
+    if (updates.chain) updateData.chain = updates.chain
+    if (updates.receivingAddress !== undefined) updateData.receiving_address = updates.receivingAddress
+    if (updates.description !== undefined) updateData.description = updates.description
+    if (updates.active !== undefined) updateData.active = updates.active
     if (embedding) {
       updateData.embedding = embedding
     }
@@ -358,10 +349,9 @@ export async function updateService(id: string, updates: Partial<PaymentService>
       keywords: data.keywords || [],
       amount: data.amount,
       currency: data.currency,
-      resourceKey: data.resource_key || data.url,
-      contractId: data.contract_id || 'data-drop.testnet',
-      url: data.url,
+      url: data.url || data.resource_key, // Support both
       chain: data.chain,
+      receivingAddress: data.receiving_address,
       description: data.description,
       active: data.active,
     }

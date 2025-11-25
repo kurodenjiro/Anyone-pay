@@ -11,9 +11,9 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_NEAR_NETWORK": "testnet",
-    "NEXT_PUBLIC_CONTRACT_ID": "anyone-pay.testnet",
-    "NEXT_PUBLIC_INTENTS_CONTRACT": "intents.testnet",
+    "NEXT_PUBLIC_NEAR_NETWORK": "mainnet",
+    "NEXT_PUBLIC_CONTRACT_ID": "anyone-pay.near",
+    "NEXT_PUBLIC_INTENTS_CONTRACT": "intents.near",
     "X402_FACILITATOR": "x402.near"
   }
 }

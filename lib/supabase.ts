@@ -34,3 +34,4 @@ export const supabase = supabaseUrl && supabaseAnonKey
 // Create index for vector similarity search:
 // CREATE INDEX ON payment_services USING ivfflat (embedding vector_cosine_ops);
 
+

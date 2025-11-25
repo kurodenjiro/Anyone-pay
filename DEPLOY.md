@@ -16,9 +16,9 @@
    - Import your GitHub repository
    - Vercel will auto-detect Next.js
    - Add environment variables:
-     - `NEXT_PUBLIC_NEAR_NETWORK=testnet`
-     - `NEXT_PUBLIC_CONTRACT_ID=anyone-pay.testnet`
-     - `NEXT_PUBLIC_INTENTS_CONTRACT=intents.testnet`
+     - `NEXT_PUBLIC_NEAR_NETWORK=mainnet`
+     - `NEXT_PUBLIC_CONTRACT_ID=anyone-pay.near`
+     - `NEXT_PUBLIC_INTENTS_CONTRACT=intents.near`
      - `X402_FACILITATOR=x402.near`
    - Deploy!
 
@@ -64,7 +64,7 @@ The relayer is now part of the Next.js API routes and deploys automatically with
 
 4. **Deploy:**
    ```bash
-   near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.testnet
+   near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.near
    ```
 
 ## One-Click Deploy Buttons

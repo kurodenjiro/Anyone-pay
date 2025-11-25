@@ -21,12 +21,12 @@ export async function POST(request: NextRequest) {
     if (intentType === 'swap') {
       try {
         const quote = await getSwapQuote({
-          senderAddress: senderAddress || 'anyone-pay.testnet',
-          recipientAddress: recipient || senderAddress || 'anyone-pay.testnet',
+          senderAddress: senderAddress || 'anyone-pay.near',
+          recipientAddress: recipient || senderAddress || 'anyone-pay.near',
           originAsset: ASSETS.NEAR,
           destinationAsset: ASSETS.USDC_ARB, // Default to USDC on Arbitrum
           amount: amount.includes('.') ? (parseFloat(amount) * 1e24).toString() : amount,
-          isTest: true, // Set to false for production
+          isTest: false, // Mainnet
         })
 
         depositAddress = quote.depositAddress
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error('Error getting swap quote:', error)
         // Fallback to mock address if 1-Click API fails
-        depositAddress = `intents.testnet::deposit::${intentType}::${Date.now()}`
+        depositAddress = `intents.near::deposit::${intentType}::${Date.now()}`
       }
     } else {
       // For payment intents, generate Zcash deposit address

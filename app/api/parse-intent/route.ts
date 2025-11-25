@@ -10,6 +10,7 @@ interface ParsedIntent {
   needsBridge?: boolean
   bridgeFrom?: string
   bridgeTo?: string
+  aiMessage?: string  // AI response when data is incomplete
 }
 
 export async function POST(request: NextRequest) {
@@ -33,11 +34,8 @@ export async function POST(request: NextRequest) {
       targetChain = await detectChainForDomain(analyzed.recipient)
     }
     
-    // Build redirect URL using resource key (data drop)
-    // The URL will trigger the Intent Solver to handle X402 payment and data retrieval
-    const redirectUrl = analyzed.resourceKey
-      ? `/intent/${analyzed.resourceKey}`
-      : analyzed.redirectUrl || analyzed.recipient
+    // Build redirect URL - use service URL if available, otherwise construct from recipient
+    const redirectUrl = analyzed.redirectUrl || analyzed.recipient
       ? analyzed.recipient?.startsWith('http')
         ? analyzed.recipient
         : `https://${analyzed.recipient}?amount=${analyzed.amount}&token=intent-${Date.now()}`
@@ -60,13 +58,13 @@ export async function POST(request: NextRequest) {
         bridgeTo: analyzed.bridgeTo || targetChain,
         serviceId: analyzed.serviceId,
         serviceName: analyzed.serviceName,
-        resourceKey: analyzed.resourceKey,
-        contractId: analyzed.contractId,
+        receivingAddress: analyzed.receivingAddress,
       },
       chain: targetChain,
       needsBridge: analyzed.needsBridge,
       bridgeFrom: analyzed.bridgeFrom,
       bridgeTo: analyzed.bridgeTo || targetChain,
+      aiMessage: analyzed.aiMessage,  // Include AI message if present
     }
     
     return NextResponse.json(parsed)

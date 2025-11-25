@@ -68,7 +68,7 @@ Built live for you by Grok – NEAR Intents Deposit Flow with AI-Powered Semanti
 - **Database**: Supabase (PostgreSQL with pgvector for semantic search)
 - **Semantic Search**: OpenAI embeddings + Supabase vector similarity search
 - **Data Drop**: Encrypted Data Drop with resource keys (no direct URLs)
-- **Deployment**: Vercel (frontend + API + Cron Jobs), NEAR testnet (contract), Supabase (database)
+- **Deployment**: Vercel (frontend + API + Cron Jobs), NEAR mainnet (contract), Supabase (database)
 
 ## 📦 Setup
 
@@ -78,7 +78,7 @@ Built live for you by Grok – NEAR Intents Deposit Flow with AI-Powered Semanti
 - NEAR AI Cloud API key ([Get one here](https://cloud.near.ai) - see [setup guide](https://docs.near.ai/cloud/get-started/#quick-setup))
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys)) - Required for semantic search embeddings
 - Supabase account ([Sign up here](https://supabase.com)) - Required for service storage
-- NEAR testnet account (optional, for contract deployment)
+- NEAR mainnet account (optional, for contract deployment)
 - Rust (for contract compilation, optional)
 - NEAR CLI (optional, for contract deployment)
 
@@ -99,12 +99,12 @@ cargo build --target wasm32-unknown-unknown --release
 # Install NEAR CLI
 npm install -g near-cli
 
-# Login to testnet
+# Login to mainnet
 near login
 
 # Deploy contract
 cd contract
-near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.testnet
+near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.near
 ```
 
 ### 3. Supabase Setup
@@ -125,9 +125,9 @@ See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for detailed instructions.
 Create `.env.local`:
 
 ```env
-NEXT_PUBLIC_NEAR_NETWORK=testnet
-NEXT_PUBLIC_CONTRACT_ID=anyone-pay.testnet
-NEXT_PUBLIC_INTENTS_CONTRACT=intents.testnet
+NEXT_PUBLIC_NEAR_NETWORK=mainnet
+NEXT_PUBLIC_CONTRACT_ID=anyone-pay.near
+NEXT_PUBLIC_INTENTS_CONTRACT=intents.near
 X402_FACILITATOR=x402.near
 
 # NEAR AI Cloud API Key (required for prompt analysis)
@@ -145,8 +145,7 @@ OPENAI_API_KEY=sk-your-openai-api-key-here
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key-here
 
-# Data Drop Smart Contract (required for Encrypted Data Drop)
-NEXT_PUBLIC_DATA_DROP_CONTRACT=data-drop.testnet
+# Note: Data Drop functionality has been removed - services now use direct URLs
 
 # Optional: 1-Click API JWT (without JWT incurs 0.1% fee on swaps)
 # Request JWT here: https://1click.fi

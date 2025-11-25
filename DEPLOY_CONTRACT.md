@@ -1,12 +1,12 @@
 # Deploy Contract Guide
 
-This guide will help you deploy the Anyone Pay contract to NEAR testnet and update your environment variables.
+This guide will help you deploy the Anyone Pay contract to NEAR mainnet and update your environment variables.
 
 ## Prerequisites
 
 1. **NEAR CLI installed**: `npm install -g near-cli`
 2. **Logged in to NEAR**: Run `near login` and complete authentication in browser
-3. **Testnet account**: The contract will be deployed to `anyone-pay.testnet`
+3. **Mainnet account**: The contract will be deployed to `anyone-pay.near`
 
 ## Step 1: Build the Contract
 
@@ -35,13 +35,13 @@ cd contract
 Or manually:
 
 ```bash
-near contract deploy anyone-pay.testnet \
+near contract deploy anyone-pay.near \
     use-file target/wasm32-unknown-unknown/release/anyone_pay.wasm \
     with-init-call new \
-    json-args '{"x402_facilitator":"x402.near","intents_contract":"intents.testnet"}' \
+    json-args '{"x402_facilitator":"x402.near","intents_contract":"intents.near"}' \
     prepaid-gas "30.0 Tgas" \
     attached-deposit "0 NEAR" \
-    network-config testnet \
+    network-config mainnet \
     sign-with-keychain \
     send
 ```
@@ -69,16 +69,16 @@ cd contract
 Or manually add to `.env.local`:
 
 ```env
-NEXT_PUBLIC_NEAR_NETWORK=testnet
-NEXT_PUBLIC_CONTRACT_ID=anyone-pay.testnet
-NEXT_PUBLIC_INTENTS_CONTRACT=intents.testnet
+NEXT_PUBLIC_NEAR_NETWORK=mainnet
+NEXT_PUBLIC_CONTRACT_ID=anyone-pay.near
+NEXT_PUBLIC_INTENTS_CONTRACT=intents.near
 X402_FACILITATOR=x402.near
 ```
 
 ## Verify Deployment
 
 Check the contract on NEAR Explorer:
-- Testnet: https://explorer.testnet.near.org/accounts/anyone-pay.testnet
+- Mainnet: https://explorer.near.org/accounts/anyone-pay.near
 
 ## Contract Methods
 
@@ -96,7 +96,7 @@ Check the contract on NEAR Explorer:
 ### "Account not found"
 Create the account first:
 ```bash
-near create-account anyone-pay.testnet --masterAccount YOUR_ACCOUNT.testnet --initialBalance 10
+near create-account anyone-pay.near --masterAccount YOUR_ACCOUNT.near --initialBalance 10
 ```
 
 ### "Access key not found"
@@ -108,5 +108,6 @@ near login
 ### Contract deployment fails
 - Check you have enough NEAR in your account
 - Verify the WASM file exists: `ls -lh target/wasm32-unknown-unknown/release/anyone_pay.wasm`
-- Check network: `near network-config testnet`
+- Check network: `near network-config mainnet`
+
 

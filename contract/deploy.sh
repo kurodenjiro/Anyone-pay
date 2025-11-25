@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Deploying Anyone Pay Contract to NEAR Testnet"
+echo "🚀 Deploying Anyone Pay Contract to NEAR Mainnet"
 echo ""
 
 # Check if contract is built
@@ -11,9 +11,9 @@ if [ ! -f "target/wasm32-unknown-unknown/release/anyone_pay.wasm" ]; then
 fi
 
 # Contract account
-ACCOUNT_ID="anyone-pay.testnet"
+ACCOUNT_ID="anyone-pay.near"
 X402_FACILITATOR="x402.near"
-INTENTS_CONTRACT="intents.testnet"
+INTENTS_CONTRACT="intents.near"
 
 echo "📦 Contract WASM size:"
 ls -lh target/wasm32-unknown-unknown/release/anyone_pay.wasm
@@ -31,7 +31,7 @@ near contract deploy $ACCOUNT_ID \
     json-args "{\"x402_facilitator\":\"$X402_FACILITATOR\",\"intents_contract\":\"$INTENTS_CONTRACT\"}" \
     prepaid-gas "30.0 Tgas" \
     attached-deposit "0 NEAR" \
-    network-config testnet \
+    network-config mainnet \
     sign-with-keychain \
     send
 
@@ -40,7 +40,7 @@ echo "✅ Contract deployed!"
 echo ""
 echo "📋 Contract Details:"
 echo "   Account ID: $ACCOUNT_ID"
-echo "   Network: testnet"
+echo "   Network: mainnet"
 echo "   X402 Facilitator: $X402_FACILITATOR"
 echo "   Intents Contract: $INTENTS_CONTRACT"
 echo ""
@@ -54,7 +54,7 @@ near contract call-function as-transaction $ACCOUNT_ID \
     args "{\"intent_id\":\"$INTENT_ID\",\"intent_type\":\"payment\",\"deposit_address\":\"zs1test123\",\"amount\":\"100000000000000000000000\",\"redirect_url\":\"https://test.com\"}" \
     prepaid-gas "30.0 Tgas" \
     attached-deposit "0 NEAR" \
-    network-config testnet \
+    network-config mainnet \
     sign-with-keychain \
     send
 
@@ -63,7 +63,7 @@ echo "   Getting intent: $INTENT_ID"
 near contract call-function as-read-only $ACCOUNT_ID \
     function get_intent \
     args "{\"intent_id\":\"$INTENT_ID\"}" \
-    network-config testnet \
+    network-config mainnet \
     network-config testnet
 
 echo ""

@@ -4,10 +4,10 @@ set -e
 # This script parses contract deployment data and updates .env.local
 # Run this after deploying the contract
 
-ACCOUNT_ID="anyone-pay.testnet"
+ACCOUNT_ID="anyone-pay.near"
 X402_FACILITATOR="x402.near"
-INTENTS_CONTRACT="intents.testnet"
-NETWORK="testnet"
+INTENTS_CONTRACT="intents.near"
+NETWORK="mainnet"
 
 ENV_FILE="../.env.local"
 
@@ -54,4 +54,5 @@ echo "   Network: $NETWORK"
 echo "   Contract ID: $ACCOUNT_ID"
 echo "   Intents Contract: $INTENTS_CONTRACT"
 echo "   X402 Facilitator: $X402_FACILITATOR"
+
 

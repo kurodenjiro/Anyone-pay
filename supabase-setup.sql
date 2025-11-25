@@ -11,37 +11,15 @@ CREATE TABLE IF NOT EXISTS payment_services (
   keywords TEXT[] NOT NULL,
   amount TEXT NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
-  resource_key TEXT NOT NULL, -- Public Key A (Linkdrop Key) for data drop
-  contract_id TEXT NOT NULL, -- Data Drop Smart Contract address
+  url TEXT NOT NULL, -- Direct URL to content/service
   chain TEXT NOT NULL,
+  receiving_address TEXT, -- Receiving address for Base, Solana, and USDC payments
   description TEXT,
   active BOOLEAN DEFAULT true,
   embedding vector(1536), -- OpenAI text-embedding-3-small dimension
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  -- Legacy support
-  url TEXT
-);
-
--- Create data_drops table for encrypted data drop storage
-CREATE TABLE IF NOT EXISTS data_drops (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  service_id UUID REFERENCES payment_services(id) ON DELETE CASCADE,
-  resource_key TEXT NOT NULL UNIQUE, -- Public Key A (Linkdrop Key)
-  contract_id TEXT NOT NULL, -- Data Drop Smart Contract address
-  encrypted_data TEXT, -- Encrypted data payload
-  required_payment_amount TEXT, -- Payment amount (e.g., "0.1")
-  required_payment_token TEXT, -- Payment token (NEAR, DATA_TOKEN, USDC)
-  intent_type TEXT NOT NULL DEFAULT 'RetrieveEncryptedData',
-  action TEXT NOT NULL DEFAULT 'claim_data', -- claim_data or create_account_and_claim_data
-  private_key_encrypted TEXT, -- Encrypted Private Key A (should be encrypted in production)
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Index for resource key lookups
-CREATE INDEX IF NOT EXISTS data_drops_resource_key_idx ON data_drops(resource_key);
-CREATE INDEX IF NOT EXISTS data_drops_service_id_idx ON data_drops(service_id);
 
 -- Create index for vector similarity search (cosine distance)
 CREATE INDEX IF NOT EXISTS payment_services_embedding_idx 
@@ -68,6 +46,7 @@ RETURNS TABLE (
   currency text,
   url text,
   chain text,
+  receiving_address text,
   description text,
   active boolean,
   similarity float
@@ -82,8 +61,9 @@ BEGIN
     payment_services.keywords,
     payment_services.amount,
     payment_services.currency,
-    payment_services.resource_key as url, -- Return resource_key as url for compatibility
+    payment_services.url,
     payment_services.chain,
+    payment_services.receiving_address,
     payment_services.description,
     payment_services.active,
     1 - (payment_services.embedding <=> query_embedding) as similarity

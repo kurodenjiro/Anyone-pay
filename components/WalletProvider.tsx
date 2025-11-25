@@ -21,7 +21,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const init = async () => {
-      const network = process.env.NEXT_PUBLIC_NEAR_NETWORK || 'testnet'
+      const network = process.env.NEXT_PUBLIC_NEAR_NETWORK || 'mainnet'
       const networkConfig = {
         networkId: network,
         nodeUrl: `https://rpc.${network}.near.org`,
@@ -45,11 +45,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setAccountId(accounts[0].accountId)
       }
 
-      // Auto-faucet on first connect (testnet only)
-      if (network === 'testnet' && accounts.length === 0) {
-        // This would be handled by the relayer or a separate faucet service
-        console.log('Testnet detected - faucet available on first connect')
-      }
+      // Auto-faucet on first connect (mainnet - removed, no faucet on mainnet)
+      // Faucet is only available on testnet
     }
 
     init()
@@ -59,7 +56,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!selector) return
 
     const modal = setupModal(selector, {
-      contractId: process.env.NEXT_PUBLIC_CONTRACT_ID || 'anyone-pay.testnet',
+      contractId: process.env.NEXT_PUBLIC_CONTRACT_ID || 'anyone-pay.near',
     })
 
     modal.show()

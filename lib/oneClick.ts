@@ -80,7 +80,7 @@ export async function checkSwapStatus(swapId: string) {
 // Common asset IDs (from NEAR Intents examples)
 export const ASSETS = {
   NEAR: 'nep141:wrap.near',
-  USDC_NEAR: 'nep141:usdc.fakes.testnet', // Testnet
+  USDC_NEAR: 'nep141:a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near', // Mainnet USDC
   USDC_ARB: 'nep141:arb-0x912ce59144191c1204e64559fe8253a0e49e6548.omft.near',
   ARB: 'nep141:arb-0x912ce59144191c1204e64559fe8253a0e49e6548.omft.near',
   ETH: 'nep141:eth-0x0000000000000000000000000000000000000000.omft.near',

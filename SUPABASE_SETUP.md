@@ -1,108 +1,175 @@
 # Supabase Setup Guide
 
-This guide will help you set up Supabase for storing payment services with AI-powered semantic search.
+This guide will help you set up your Supabase database for Anyone Pay.
 
 ## Prerequisites
 
-1. **Supabase Account**: Sign up at https://supabase.com
-2. **OpenAI API Key**: Required for generating embeddings (get from https://platform.openai.com/api-keys)
+- A Supabase account ([Sign up here](https://supabase.com))
+- A Supabase project created
 
 ## Step 1: Create Supabase Project
 
-1. Go to https://supabase.com and create a new project
-2. Wait for the project to be fully provisioned
-3. Note your project URL and anon key from Settings > API
+1. Go to https://supabase.com/dashboard
+2. Click "New Project"
+3. Fill in:
+   - **Name**: `anyone-pay` (or your preferred name)
+   - **Database Password**: Choose a strong password (save it!)
+   - **Region**: Choose closest to your users
+4. Click "Create new project"
+5. Wait for project to be provisioned (~2 minutes)
 
-## Step 2: Run SQL Setup
+## Step 2: Enable pgvector Extension
 
-1. Go to your Supabase project dashboard
-2. Navigate to **SQL Editor**
-3. Copy and paste the contents of `supabase-setup.sql`
-4. Click **Run** to execute the SQL
+1. In your Supabase project dashboard, go to **Database** → **Extensions**
+2. Search for `vector`
+3. Click the toggle to **Enable** the `vector` extension
+4. Wait for it to activate
 
-This will:
-- Enable the `vector` extension (pgvector) for semantic search
-- Create the `payment_services` table
-- Create indexes for fast vector similarity search
-- Create the `match_services` function for semantic search
-- Set up automatic timestamp updates
+## Step 3: Run SQL Setup
 
-## Step 3: Configure Environment Variables
+### Option A: Using Supabase Dashboard (Recommended)
 
-Add to your `.env.local`:
+1. Go to **SQL Editor** in the left sidebar
+2. Click **New query**
+3. Open `supabase-setup.sql` from this project
+4. Copy the entire file contents
+5. Paste into the SQL Editor
+6. Click **Run** (or press `Cmd+Enter` / `Ctrl+Enter`)
 
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+### Option B: Using Supabase CLI
 
-# OpenAI API Key (required for embeddings)
-OPENAI_API_KEY=sk-your-openai-api-key-here
+```bash
+# Install Supabase CLI
+brew install supabase/tap/supabase
+
+# Login
+supabase login
+
+# Link to your project (get project ref from Supabase dashboard URL)
+supabase link --project-ref your-project-ref
+
+# Create migration
+supabase migration new setup_payment_services
+
+# Copy SQL to migration file
+cp supabase-setup.sql supabase/migrations/[timestamp]_setup_payment_services.sql
+
+# Apply migration
+supabase db push
 ```
 
 ## Step 4: Verify Setup
 
-1. Restart your Next.js dev server
-2. Try creating a service through the UI
-3. The service should be saved to Supabase with an embedding
+Run this query in SQL Editor to verify:
 
-## How Semantic Search Works
+```sql
+-- Check tables
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+AND table_name IN ('payment_services', 'data_drops');
 
-1. **When creating a service**:
-   - The system generates an embedding (vector) from: `name + description + keywords`
-   - Stores the embedding in the `embedding` column (1536 dimensions)
+-- Check function
+SELECT routine_name 
+FROM information_schema.routines 
+WHERE routine_schema = 'public' 
+AND routine_name = 'match_services';
 
-2. **When searching**:
-   - User query is converted to an embedding
-   - Supabase finds services with similar embeddings (cosine similarity)
-   - Only returns services above the similarity threshold (default: 0.7 = 70% match)
-   - If no match is found above threshold, returns empty results
+-- Check extension
+SELECT * FROM pg_extension WHERE extname = 'vector';
+```
 
-3. **Threshold**:
-   - 0.7 = 70% similarity (strict - only very similar matches)
-   - 0.5 = 50% similarity (looser - more matches)
-   - Adjust in `lib/serviceRegistry.ts` `findBestService()` function
+You should see:
+- ✅ 2 tables: `payment_services`, `data_drops`
+- ✅ 1 function: `match_services`
+- ✅ 1 extension: `vector`
+
+## Step 5: Get API Keys
+
+1. Go to **Settings** → **API**
+2. Copy the following:
+   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+   - **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` (optional, for admin operations)
+
+## Step 6: Update Environment Variables
+
+Add to your `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+```
+
+## Step 7: Test Connection
+
+Run the app and verify:
+
+```bash
+npm run dev
+```
+
+The app should connect to Supabase without errors.
 
 ## Troubleshooting
 
-### "Supabase not configured" warning
-- Check that `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set
-- Restart your dev server after adding env variables
+### Error: "extension 'vector' does not exist"
+- Go to Database → Extensions
+- Enable the `vector` extension manually
 
-### "OpenAI API key not found" warning
-- Semantic search will fallback to keyword search
-- Add `OPENAI_API_KEY` to `.env.local`
+### Error: "permission denied"
+- Make sure you're running SQL in the SQL Editor (not via API)
+- SQL Editor has full database access
 
-### No results from search
-- The similarity threshold might be too high
-- Try lowering the threshold in `findBestService()` (currently 0.7)
-- Check that services have embeddings (should be auto-generated on creation)
+### Error: "relation already exists"
+- This is fine! The `IF NOT EXISTS` clauses prevent errors
+- Tables already exist from a previous setup
 
-### Vector extension not enabled
-- Run the SQL setup script again
-- Check Supabase logs for errors
+### Tables not showing up
+- Refresh the Supabase dashboard
+- Check the SQL Editor for any error messages
+- Verify you're in the correct project
 
-## Database Schema
+## What Gets Created
 
-```sql
-payment_services
-├── id (UUID, primary key)
-├── name (TEXT)
-├── keywords (TEXT[])
-├── amount (TEXT)
-├── currency (TEXT)
-├── url (TEXT)
-├── chain (TEXT)
-├── description (TEXT)
-├── active (BOOLEAN)
-├── embedding (vector(1536))  -- For semantic search
-├── created_at (TIMESTAMP)
-└── updated_at (TIMESTAMP)
-```
+### Tables
 
-## API Functions
+1. **payment_services**
+   - Stores payment service definitions
+   - Includes vector embeddings for semantic search
+   - Fields: `id`, `name`, `keywords`, `amount`, `currency`, `resource_key`, `contract_id`, `chain`, `description`, `active`, `embedding`
 
-- `match_services(query_embedding, match_threshold, match_count)` - Semantic search function
-- Uses cosine similarity: `1 - (embedding <=> query_embedding)`
-- Only returns results above `match_threshold`
+2. **data_drops**
+   - Stores encrypted data drop information
+   - Links to payment services
+   - Fields: `id`, `service_id`, `resource_key`, `contract_id`, `encrypted_data`, `required_payment_amount`, `required_payment_token`, `intent_type`, `action`, `private_key_encrypted`
 
+### Functions
+
+1. **match_services**
+   - Performs semantic search using vector similarity
+   - Parameters: `query_embedding`, `match_threshold`, `match_count`
+   - Returns matching services with similarity scores
+
+### Indexes
+
+- Vector similarity index on `payment_services.embedding`
+- Index on `data_drops.resource_key` for fast lookups
+- Index on active services for filtering
+
+## Next Steps
+
+After setup is complete:
+
+1. ✅ Verify all tables and functions exist
+2. ✅ Add environment variables to `.env.local`
+3. ✅ Test the application
+4. ✅ Create your first payment service!
+
+## Support
+
+If you encounter issues:
+- Check Supabase logs in Dashboard → Logs
+- Review SQL Editor for error messages
+- Verify all environment variables are set correctly

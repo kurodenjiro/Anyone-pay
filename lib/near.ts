@@ -1,9 +1,9 @@
 // NEAR connection utility for API routes
 import { connect, keyStores, Contract, Account } from 'near-api-js'
 
-const NETWORK = process.env.NEXT_PUBLIC_NEAR_NETWORK || 'testnet'
-const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || 'anyone-pay.testnet'
-const INTENTS_CONTRACT = process.env.NEXT_PUBLIC_INTENTS_CONTRACT || 'intents.testnet'
+const NETWORK = process.env.NEXT_PUBLIC_NEAR_NETWORK || 'mainnet'
+const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID || 'anyone-pay.near'
+const INTENTS_CONTRACT = process.env.NEXT_PUBLIC_INTENTS_CONTRACT || 'intents.near'
 const X402_FACILITATOR = process.env.X402_FACILITATOR || 'x402.near'
 
 const nearConfig = {
