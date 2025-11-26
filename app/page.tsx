@@ -52,6 +52,7 @@ function HomeContent() {
   const [pollingStatus, setPollingStatus] = useState<string | null>(null) // Current polling status
   const [pollingAttempt, setPollingAttempt] = useState(0) // Current polling attempt number
   const [countdown, setCountdown] = useState<number | null>(null) // Countdown after deposit address creation
+  const [timeEstimate, setTimeEstimate] = useState<number | null>(null) // Time estimate from swap status
 
   useEffect(() => {
     // Check if service ID is in URL
@@ -221,11 +222,17 @@ function HomeContent() {
         // Currency conversion message is informational only, doesn't block payment
         const { depositAddress, intentId, quoteWaitingTimeMs } = await generateDepositAddress(parsed.type, amount, parsed)
         
+        // Store target API URL for content page
+        const targetApiUrl = parsed.redirect_url || parsed.redirectUrl || ''
+        if (targetApiUrl) {
+          localStorage.setItem('targetApiUrl', targetApiUrl)
+        }
+        
         setIntentData({
           type: parsed.type,
           depositAddress,
           amount,
-          redirectUrl: parsed.redirect_url || '',
+          redirectUrl: targetApiUrl,
           chain: parsed.chain || parsed.metadata?.chain,
           needsBridge: parsed.needsBridge ?? parsed.metadata?.needsBridge,
           bridgeTo: parsed.bridgeTo || parsed.metadata?.bridgeTo,
@@ -311,6 +318,7 @@ function HomeContent() {
           recipient: parsed.metadata?.receivingAddress || parsed.metadata?.to || '',
           senderAddress: '', // Will be set from wallet if available
           chain: parsed.chain || parsed.metadata?.chain || 'base',
+          redirectUrl: parsed.redirect_url || parsed.redirectUrl || '',
         }),
       })
       
@@ -365,13 +373,52 @@ function HomeContent() {
         // Update polling status in UI
         setPollingStatus(status)
         
+        // Extract timeEstimate from swap status if available
+        if (data.swapStatus?.quoteResponse?.quote?.timeEstimate) {
+          const estimateSeconds = data.swapStatus.quoteResponse.quote.timeEstimate
+          setTimeEstimate(estimateSeconds * 1000) // Convert to milliseconds
+        }
+        
         console.log(`   Current status: ${status} (attempt ${attempts + 1}/${maxAttempts})`)
         
         if (data.confirmed || status === 'SUCCESS') {
           console.log('🎉 Intent Fulfilled!')
           setPollingStatus('SUCCESS')
+          
+          // Execute x402 payment after swap completes
+          // The swap wallet will sign and send payment to the original recipient address
+          try {
+            const x402Response = await fetch('/api/relayer/execute-x402', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ depositAddress: address }),
+            })
+            
+            const x402Data = await x402Response.json()
+            
+            if (x402Data.success && x402Data.redirectUrl) {
+              console.log('✅ x402 payment executed:', x402Data)
+              // Redirect to content page with signed payload
+              setDepositConfirmed(true)
+              setTimeout(() => {
+                window.location.href = x402Data.redirectUrl
+              }, 2000)
+              return
+            } else if (x402Data.redirectUrl) {
+              // Redirect to refund page
+              console.log('⚠️ x402 payment failed, redirecting to refund:', x402Data.error)
+              setDepositConfirmed(true)
+              setTimeout(() => {
+                window.location.href = x402Data.redirectUrl
+              }, 2000)
+              return
+            }
+          } catch (error) {
+            console.error('Error executing x402 payment:', error)
+          }
+          
           setDepositConfirmed(true)
-          // Redirect to premium content after a brief delay
+          // Fallback redirect
           setTimeout(() => {
             if (intentData?.redirectUrl) {
               window.location.href = intentData.redirectUrl
@@ -427,6 +474,7 @@ function HomeContent() {
     setPollingStatus(null)
     setPollingAttempt(0)
     setCountdown(null)
+    setTimeEstimate(null)
     
     // Clear URL parameters and go to home
     const newUrl = new URL(window.location.href)
@@ -516,7 +564,7 @@ function HomeContent() {
               <IntentsQR 
                 depositAddress={intentData.depositAddress}
                 amount={intentData.amount}
-                quoteWaitingTimeMs={intentData.quoteWaitingTimeMs}
+                quoteWaitingTimeMs={timeEstimate || intentData.quoteWaitingTimeMs}
               />
             </motion.div>
           )}

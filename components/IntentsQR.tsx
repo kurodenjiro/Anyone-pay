@@ -89,17 +89,11 @@ export function IntentsQR({ depositAddress, amount, quoteWaitingTimeMs }: Intent
           <p className="text-xs text-gray-500 text-center mt-2">
             Send ZEC to this shielded address
           </p>
-          {quoteWaitingTimeMs && countdown !== null && (
+          {quoteWaitingTimeMs && countdown !== null && countdown > 0 && (
             <div className="text-center mt-2">
-              {countdown > 0 ? (
-                <p className="text-xs text-purple-400">
-                  Quote processing: <span className="font-semibold">{countdown}s</span> remaining
-                </p>
-              ) : (
-                <p className="text-xs text-purple-400">
-                  Checking deposit status...
-                </p>
-              )}
+              <p className="text-xs text-purple-400">
+                Deposit: <span className="font-semibold">{countdown}s</span> remaining
+              </p>
             </div>
           )}
         </div>

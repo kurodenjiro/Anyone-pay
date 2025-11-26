@@ -92,6 +92,16 @@ export async function POST(request: NextRequest) {
       markDepositConfirmed(address)
     }
 
+    // Get swap status response to extract timeEstimate
+    let swapStatusResponse = null
+    try {
+      const swapStatus = await checkSwapStatus(address)
+      swapStatusResponse = swapStatus
+    } catch (error) {
+      // Continue without swap status if check fails
+      console.error('Error getting swap status for timeEstimate:', error)
+    }
+
     return NextResponse.json({
       confirmed,
       intentId: tracking.intentId,
@@ -99,6 +109,7 @@ export async function POST(request: NextRequest) {
       depositAddress: address,
       refunded: status.refunded || false,
       processing: status.processing || false,
+      swapStatus: swapStatusResponse, // Include full swap status response
     })
   } catch (error) {
     console.error('Error checking deposit:', error)
