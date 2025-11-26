@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { AmbientBackground } from '@/components/AmbientBackground'
 import { FloatingInput } from '@/components/FloatingInput'
 import { IntentsQR } from '@/components/IntentsQR'
-import { IntentFlowDiagram } from '@/components/IntentFlowDiagram'
 import { WalletProvider } from '@/components/WalletProvider'
 import { CreateServiceModal } from '@/components/CreateServiceModal'
 import { ServicesList } from '@/components/ServicesList'
@@ -38,32 +37,52 @@ function HomeContent() {
     redirectUrl: string
     chain?: string
     needsBridge?: boolean
+    bridgeFrom?: string
     bridgeTo?: string
     serviceName?: string
     receivingAddress?: string
     currency?: string
     aiMessage?: string
+    quoteWaitingTimeMs?: number
   } | null>(null)
-  const [showFlow, setShowFlow] = useState(false)
   const [depositConfirmed, setDepositConfirmed] = useState(false)
   const [showCreateService, setShowCreateService] = useState(false)
   const [servicesKey, setServicesKey] = useState(0) // Force re-render when service is created
   const [isLoading, setIsLoading] = useState(false) // Loading state for prompt processing
+  const [pollingStatus, setPollingStatus] = useState<string | null>(null) // Current polling status
+  const [pollingAttempt, setPollingAttempt] = useState(0) // Current polling attempt number
+  const [countdown, setCountdown] = useState<number | null>(null) // Countdown after deposit address creation
 
   useEffect(() => {
     // Check if service ID is in URL
     const serviceId = searchParams.get('service')
+    const promptFromUrl = searchParams.get('prompt')
+    
     if (serviceId && !intentData) {
       // Load service from URL
       loadServiceFromId(serviceId)
-    } else if (!intentData) {
+    } else if (promptFromUrl && !intentData && !query) {
+      // Load prompt from URL - will be handled by handleSubmit when component is ready
+      setQuery(promptFromUrl)
+      setShowInput(true)
+    } else if (!intentData && !promptFromUrl && !serviceId) {
       // Auto-show input after a brief delay for first load (only if no intent data)
       const timer = setTimeout(() => {
         setShowInput(true)
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [searchParams, intentData])
+  }, [searchParams, intentData, query])
+  
+  // Handle prompt from URL after query is set
+  useEffect(() => {
+    const promptFromUrl = searchParams.get('prompt')
+    if (promptFromUrl && query === promptFromUrl && !intentData && !isLoading) {
+      // Auto-submit the prompt from URL
+      handleSubmit(promptFromUrl).catch(console.error)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, searchParams])
 
   const loadServiceFromId = async (serviceId: string) => {
     try {
@@ -72,7 +91,7 @@ function HomeContent() {
       
       // Create intent with service data
       const amount = fullService.amount || '0.1'
-      const { depositAddress, intentId } = await generateDepositAddress(
+      const { depositAddress, intentId, quoteWaitingTimeMs } = await generateDepositAddress(
         'payment',
         amount,
         {
@@ -100,11 +119,28 @@ function HomeContent() {
         serviceName: fullService.name,
         receivingAddress: fullService.receivingAddress,
         currency: fullService.currency,
+        quoteWaitingTimeMs,
       })
-      setShowFlow(true)
-      
-      // Start polling for deposit confirmation
-      pollDepositConfirmation(depositAddress)
+      // Start countdown after deposit address is created
+      if (quoteWaitingTimeMs) {
+        const initialSeconds = Math.ceil(quoteWaitingTimeMs / 1000)
+        setCountdown(initialSeconds)
+        
+        const countdownInterval = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev === null || prev <= 0) {
+              clearInterval(countdownInterval)
+              // Start polling after countdown completes
+              pollDepositConfirmation(depositAddress)
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+      } else {
+        // Start polling immediately if no countdown
+        pollDepositConfirmation(depositAddress)
+      }
     } catch (error) {
       console.error('Error loading service from URL:', error)
     }
@@ -131,6 +167,11 @@ function HomeContent() {
     setQuery(text)
     setIsLoading(true) // Show loading state
     // Keep input visible - don't hide it
+    
+    // Update URL with prompt parameter
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('prompt', text)
+    window.history.pushState({}, '', newUrl.toString())
 
     try {
       // Parse intent using Next.js API route
@@ -140,6 +181,16 @@ function HomeContent() {
       const chain = parsed.chain || parsed.metadata?.chain || ''
       const receivingAddress = parsed.metadata?.receivingAddress || ''
       
+      // Debug logging
+      console.log('Parsed intent:', {
+        amount,
+        currency,
+        chain,
+        receivingAddress,
+        aiMessage: parsed.aiMessage,
+        fullParsed: parsed
+      })
+      
       // Normalize currency to USDC if it's USDT or any USD variant
       const normalizedCurrency = (currency && (currency.toUpperCase() === 'USDT' || currency.toUpperCase().includes('USD'))) 
         ? 'USDC' 
@@ -148,13 +199,27 @@ function HomeContent() {
       // Check if payment data is complete (use normalized currency)
       const isComplete = isPaymentDataComplete(amount, normalizedCurrency, chain, receivingAddress)
       
-      // Check if there's a currency conversion message
-      const hasCurrencyConversion = parsed.aiMessage && parsed.aiMessage.includes('converted')
+      console.log('Payment completeness check:', {
+        isComplete,
+        amount,
+        normalizedCurrency,
+        chain,
+        receivingAddress,
+        checks: {
+          hasAmount: !!(amount && parseFloat(amount) > 0),
+          hasCurrency: normalizedCurrency === 'USDC',
+          hasChain: chain === 'base' || chain === 'solana',
+          hasAddress: !!(receivingAddress && receivingAddress.length > 0)
+        }
+      })
       
-      if (isComplete && (!parsed.aiMessage || hasCurrencyConversion)) {
+      // Check if there's a currency conversion message (should not block payment)
+      const hasCurrencyConversion = parsed.aiMessage && parsed.aiMessage.toLowerCase().includes('converted')
+      
+      if (isComplete) {
         // Full payment data available - generate QR code
-        // If there was a currency conversion, we'll show it briefly but still generate QR
-        const { depositAddress, intentId } = await generateDepositAddress(parsed.type, amount, parsed)
+        // Currency conversion message is informational only, doesn't block payment
+        const { depositAddress, intentId, quoteWaitingTimeMs } = await generateDepositAddress(parsed.type, amount, parsed)
         
         setIntentData({
           type: parsed.type,
@@ -167,13 +232,31 @@ function HomeContent() {
           serviceName: parsed.metadata?.serviceName,
           receivingAddress: parsed.metadata?.receivingAddress,
           currency: normalizedCurrency || 'USDC',
-          // Show currency conversion message if present, but still allow QR generation
+          quoteWaitingTimeMs,
+          // Show currency conversion message if present (informational only)
           aiMessage: hasCurrencyConversion ? parsed.aiMessage : undefined,
         })
-        setShowFlow(true)
 
-        // Start polling for deposit confirmation
-        pollDepositConfirmation(depositAddress)
+        // Start countdown after deposit address is created
+        if (quoteWaitingTimeMs) {
+          const initialSeconds = Math.ceil(quoteWaitingTimeMs / 1000)
+          setCountdown(initialSeconds)
+          
+          const countdownInterval = setInterval(() => {
+            setCountdown((prev) => {
+              if (prev === null || prev <= 0) {
+                clearInterval(countdownInterval)
+                // Start polling after countdown completes
+                pollDepositConfirmation(depositAddress)
+                return 0
+              }
+              return prev - 1
+            })
+          }, 1000)
+        } else {
+          // Start polling immediately if no countdown
+          pollDepositConfirmation(depositAddress)
+        }
       } else {
         // Incomplete data - show AI message
         setIntentData({
@@ -186,9 +269,8 @@ function HomeContent() {
           serviceName: parsed.metadata?.serviceName,
           receivingAddress: receivingAddress || '',
           currency: normalizedCurrency || '',
-          aiMessage: parsed.aiMessage || "I'd be happy to help you make a payment! To proceed, I need: the amount (e.g., 0.1 USDC), the target network (Base or Solana), and the payment address. Could you provide these details?",
+          aiMessage: parsed.aiMessage, // Only show AI response, no default fallback
         })
-        setShowFlow(false) // Don't show flow for incomplete data
       }
     } catch (error) {
       console.error('Error processing intent:', error)
@@ -203,7 +285,6 @@ function HomeContent() {
         currency: '',
         aiMessage: "Sorry, I encountered an error processing your request. Please try again.",
       })
-      setShowFlow(false)
     } finally {
       setIsLoading(false) // Hide loading state
     }
@@ -213,69 +294,82 @@ function HomeContent() {
     intentType: string, 
     amount: string,
     parsed: any
-  ): Promise<{ depositAddress: string; intentId: string }> => {
+  ): Promise<{ depositAddress: string; intentId: string; quoteWaitingTimeMs?: number }> => {
     const timestamp = Date.now()
     const intentId = `intent-${timestamp}`
     
-    // Generate Zcash deposit address
-    // Zcash addresses start with 'z' (shielded) or 't' (transparent)
-    // For demo, we'll generate a mock Zcash address
-    const zcashAddress = generateZcashAddress(intentId)
-    let depositAddress = zcashAddress
-    
-    // Register with relayer (now Next.js API with 1-Click integration)
+    // Register with relayer - this will get quote from 1-Click API for USDC → Zcash
+    // The API will return a real deposit address from 1-Click API
     try {
       const response = await fetch('/api/relayer/register-deposit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           intentId,
-          intentType,
-          depositAddress, // Zcash address
+          intentType: 'payment', // Always use payment type
           amount,
-          recipient: parsed.metadata?.to || '',
+          recipient: parsed.metadata?.receivingAddress || parsed.metadata?.to || '',
           senderAddress: '', // Will be set from wallet if available
+          chain: parsed.chain || parsed.metadata?.chain || 'base',
         }),
       })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to register deposit')
+      }
+      
       const data = await response.json()
-      // Use real deposit address from 1-Click API if available (for swaps)
-      if (data.depositAddress) {
-        depositAddress = data.depositAddress
+      
+      // Use real deposit address from 1-Click API
+      if (!data.depositAddress) {
+        throw new Error('No deposit address returned from 1-Click API')
+      }
+      
+      return { 
+        depositAddress: data.depositAddress, 
+        intentId,
+        quoteWaitingTimeMs: data.quoteWaitingTimeMs
       }
     } catch (error) {
       console.error('Failed to register deposit:', error)
+      throw error
     }
-    
-    return { depositAddress, intentId }
-  }
-
-  const generateZcashAddress = (intentId: string): string => {
-    // Generate a mock Zcash shielded address (Sapling format: starts with 'zs1')
-    // In production, this would be generated by Zcash wallet or API
-    // Zcash addresses: zs1 (Sapling shielded), zt1 (Orchard shielded), or t1/t3 (transparent)
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-    const randomPart = Array.from({ length: 74 }, () => 
-      chars[Math.floor(Math.random() * chars.length)]
-    ).join('')
-    // Zcash Sapling shielded address format: zs1 + 75 characters
-    return `zs1${randomPart}`
   }
 
   const pollDepositConfirmation = async (address: string) => {
-    const maxAttempts = 60 // 5 minutes max
+    const maxAttempts = 60 // 5 minutes max (60 attempts * 5 seconds = 5 minutes)
     let attempts = 0
+
+    console.log('🔄 Starting status polling...')
+    setPollingStatus('PENDING')
+    setPollingAttempt(0)
 
     const poll = async () => {
       try {
+        setPollingAttempt(attempts + 1)
+        
         const response = await fetch('/api/relayer/check-deposit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address }),
         })
         
-        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
         
-        if (data.confirmed) {
+        const data = await response.json()
+        const status = data.status || 'PENDING'
+        
+        // Update polling status in UI
+        setPollingStatus(status)
+        
+        console.log(`   Current status: ${status} (attempt ${attempts + 1}/${maxAttempts})`)
+        
+        if (data.confirmed || status === 'SUCCESS') {
+          console.log('🎉 Intent Fulfilled!')
+          setPollingStatus('SUCCESS')
           setDepositConfirmed(true)
           // Redirect to premium content after a brief delay
           setTimeout(() => {
@@ -283,15 +377,34 @@ function HomeContent() {
               window.location.href = intentData.redirectUrl
             }
           }, 2000)
-        } else if (attempts < maxAttempts) {
+          return // Stop polling
+        }
+        
+        // If status is REFUNDED, stop polling
+        if (status === 'REFUNDED' || status === 'FAILED') {
+          console.log(`❌ Swap failed with status: ${status}`)
+          setPollingStatus(status)
+          return // Stop polling
+        }
+        
+        // Continue polling if not at max attempts
+        if (attempts < maxAttempts) {
           attempts++
           setTimeout(poll, 5000) // Poll every 5 seconds
+        } else {
+          console.log('⏸️ Max polling attempts reached')
+          setPollingStatus('TIMEOUT')
         }
       } catch (error) {
-        console.error('Polling error:', error)
+        console.error('Error checking status:', error)
+        console.log('⏳ Waiting 5 seconds before retry...')
+        setPollingStatus('ERROR')
         if (attempts < maxAttempts) {
           attempts++
           setTimeout(poll, 5000)
+        } else {
+          console.log('⏸️ Max polling attempts reached after error')
+          setPollingStatus('TIMEOUT')
         }
       }
     }
@@ -308,9 +421,18 @@ function HomeContent() {
   const handleNewQuery = () => {
     // Reset when user wants to start a new query
     setIntentData(null)
-    setShowFlow(false)
     setDepositConfirmed(false)
     setQuery('')
+    setIsLoading(false)
+    setPollingStatus(null)
+    setPollingAttempt(0)
+    setCountdown(null)
+    
+    // Clear URL parameters and go to home
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('prompt')
+    newUrl.searchParams.delete('service')
+    window.history.pushState({}, '', newUrl.pathname)
   }
 
   return (
@@ -322,7 +444,12 @@ function HomeContent() {
         
         {/* Branding */}
         <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
-          <h1 className="text-2xl font-bold gradient-text">Anyone Pay Legend</h1>
+          <button
+            onClick={handleNewQuery}
+            className="text-4xl md:text-5xl font-bold gradient-text hover:opacity-80 transition-opacity cursor-pointer"
+          >
+            Anyone Pay Legend
+          </button>
         </div>
         
         {/* All components in one page flow - centered and shortened */}
@@ -367,7 +494,7 @@ function HomeContent() {
             >
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <span className="text-purple-400 text-lg">💬</span>
+                  <span className="text-purple-400 text-lg">🤖</span>
                 </div>
                 <div className="flex-1">
                   <p className="text-white text-sm leading-relaxed">
@@ -379,7 +506,7 @@ function HomeContent() {
           )}
 
           {/* QR Code - second component (only show when payment data is complete) */}
-          {intentData && showFlow && intentData.depositAddress && !intentData.aiMessage && (
+          {intentData && intentData.depositAddress && !intentData.aiMessage && (
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -389,29 +516,60 @@ function HomeContent() {
               <IntentsQR 
                 depositAddress={intentData.depositAddress}
                 amount={intentData.amount}
+                quoteWaitingTimeMs={intentData.quoteWaitingTimeMs}
               />
             </motion.div>
           )}
 
-          {/* Flow Diagram - third component */}
-          {intentData && showFlow && (
+
+          {/* Countdown after deposit address creation */}
+          {countdown !== null && countdown > 0 && (
             <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className="w-full"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-4 shadow-xl shadow-purple-500/10"
             >
-              <IntentFlowDiagram 
-                confirmed={depositConfirmed}
-                chain={intentData.chain}
-                needsBridge={intentData.needsBridge}
-                bridgeTo={intentData.bridgeTo}
-                serviceName={intentData.serviceName}
-                receivingAddress={intentData.receivingAddress}
-                amount={intentData.amount}
-                currency={intentData.currency}
-                depositAddress={intentData.depositAddress}
-              />
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-white">
+                  Preparing deposit address... <span className="text-purple-400 font-semibold">{countdown}s</span>
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Polling status */}
+          {pollingStatus && countdown === 0 && !depositConfirmed && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-4 shadow-xl shadow-purple-500/10"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <div>
+                    <p className="text-sm text-white">
+                      Checking deposit status... 
+                      <span className="text-purple-400 ml-2 font-semibold">
+                        {pollingStatus === 'PENDING' || pollingStatus === 'PENDING_DEPOSIT' ? 'Waiting for deposit' :
+                         pollingStatus === 'KNOWN_DEPOSIT_TX' ? 'Deposit detected' :
+                         pollingStatus === 'PROCESSING' ? 'Processing swap' :
+                         pollingStatus === 'SUCCESS' ? 'Success!' :
+                         pollingStatus === 'REFUNDED' ? 'Refunded' :
+                         pollingStatus === 'FAILED' ? 'Failed' :
+                         pollingStatus === 'ERROR' ? 'Error' :
+                         pollingStatus === 'TIMEOUT' ? 'Timeout' :
+                         pollingStatus === 'INCOMPLETE_DEPOSIT' ? 'Incomplete deposit' :
+                         'Checking...'}
+                      </span>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Attempt {pollingAttempt}/60
+                    </p>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -420,9 +578,9 @@ function HomeContent() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-purple-400 text-sm flex items-center gap-2"
+              className="text-green-400 text-sm flex items-center gap-2"
             >
-              <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
               Redirecting to premium content...
             </motion.div>
           )}

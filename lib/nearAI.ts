@@ -88,7 +88,7 @@ For COMPLETE payment intents (all required fields present), respond with this JS
   "action": "pay",
   "amount": "0.1",
   "currency": "USDC",
-  "recipient": "meme-content.fun",
+  "recipient": "",
   "chain": "base",
   "needsBridge": true,
   "bridgeFrom": "zcash",
@@ -104,7 +104,7 @@ For INCOMPLETE intents (missing required fields), respond with this JSON structu
   "recipient": "",
   "chain": "",
   "needsBridge": false,
-  "aiMessage": "I'd be happy to help you make a payment! To create a payment QR code, I need: (1) the amount in USDC (e.g., 0.1 USDC), (2) the target network (Base or Solana), and (3) the payment receiving address. Could you provide these details?"
+  "aiMessage": "<missing required fields>"
 }
 
 Make the aiMessage natural, friendly, and specific about what's missing. Always respond with valid JSON only.`
@@ -123,19 +123,18 @@ Make the aiMessage natural, friendly, and specific about what's missing. Always 
     const response = completion.choices[0].message.content
     if (response) {
       const parsed = JSON.parse(response) as AnalyzedIntent
-      
+      console.log(parsed)
       // Normalize currency: convert USDT or any USD-related currency to USDC
       const originalCurrency = parsed.currency?.toUpperCase() || ''
-      if (originalCurrency && (originalCurrency === 'USDT' || originalCurrency.includes('USD'))) {
-        if (originalCurrency !== 'USDC') {
-          // Add AI message explaining the conversion
-          if (!parsed.aiMessage) {
-            parsed.aiMessage = `I've converted ${originalCurrency} to USDC as the system only supports USDC payments. `
-          } else {
-            parsed.aiMessage = `I've converted ${originalCurrency} to USDC as the system only supports USDC payments. ${parsed.aiMessage}`
-          }
-        }
+      if (originalCurrency && (originalCurrency === 'USDT' || (originalCurrency.includes('USD') && originalCurrency !== 'USDC'))) {
+        // Convert to USDC
         parsed.currency = 'USDC'
+        // Add AI message explaining the conversion (but don't block payment if data is complete)
+        if (!parsed.aiMessage) {
+          parsed.aiMessage = `I've converted ${originalCurrency} to USDC since we only support USDC payments.`
+        } else if (!parsed.aiMessage.includes('converted')) {
+          parsed.aiMessage = `I've converted ${originalCurrency} to USDC since we only support USDC payments. ${parsed.aiMessage}`
+        }
       }
       
       // Check if payment data is complete
@@ -151,16 +150,25 @@ Make the aiMessage natural, friendly, and specific about what's missing. Always 
       // Keep the aiMessage (including conversion messages) - don't remove it
       // The frontend will handle showing it appropriately even when data is complete
       
-      // If incomplete and no aiMessage, generate one
-      if (!hasCompleteData && !parsed.aiMessage) {
-        const missingFields: string[] = []
-        if (!parsed.amount || parseFloat(parsed.amount) <= 0) missingFields.push('amount (e.g., 0.1 USDC)')
-        if (parsed.currency !== 'USDC') missingFields.push('currency (must be USDC)')
-        if (parsed.chain !== 'base' && parsed.chain !== 'solana') missingFields.push('network (Base or Solana)')
-        if (!parsed.receivingAddress || parsed.receivingAddress.length === 0) missingFields.push('payment receiving address')
-        
-        parsed.aiMessage = `I'd be happy to help you make a payment! To create a payment QR code, I need: ${missingFields.join(', ')}. Could you provide these details?`
-      }
+        // If incomplete and no aiMessage, generate one
+        if (!hasCompleteData && !parsed.aiMessage) {
+          const missingFields: string[] = []
+          if (!parsed.amount || parseFloat(parsed.amount) <= 0) missingFields.push('the amount in USDC (like 0.1 USDC)')
+          if (parsed.currency !== 'USDC') missingFields.push('USDC as the currency')
+          if (parsed.chain !== 'base' && parsed.chain !== 'solana') missingFields.push('which network to use (Base or Solana)')
+          if (!parsed.receivingAddress || parsed.receivingAddress.length === 0) missingFields.push('the payment address')
+          
+          // Generate natural, conversational message based on missing fields
+          const fieldCount = missingFields.length
+          if (fieldCount === 1) {
+            parsed.aiMessage = `I need ${missingFields[0]} to process your payment.`
+          } else if (fieldCount === 2) {
+            parsed.aiMessage = `I need ${missingFields[0]} and ${missingFields[1]} to create this payment.`
+          } else {
+            const lastField = missingFields.pop()
+            parsed.aiMessage = `I need ${missingFields.join(', ')}, and ${lastField} to process your payment.`
+          }
+        }
       
       return parsed
     }
@@ -181,7 +189,24 @@ Make the aiMessage natural, friendly, and specific about what's missing. Always 
   )
   
   if (!hasCompleteData) {
-    fallback.aiMessage = "I'd be happy to help you make a payment! To create a payment QR code, I need: the amount in USDC (e.g., 0.1 USDC), the target network (Base or Solana), and the payment receiving address. Could you provide these details?"
+    const missingFields: string[] = []
+    if (!fallback.amount || parseFloat(fallback.amount) <= 0) missingFields.push('the amount in USDC (like 0.1 USDC)')
+    if (fallback.chain !== 'base' && fallback.chain !== 'solana') missingFields.push('which network to use (Base or Solana)')
+    if (!fallback.receivingAddress || fallback.receivingAddress.length === 0) missingFields.push('the payment address')
+    
+    if (missingFields.length > 0) {
+      const fieldCount = missingFields.length
+      if (fieldCount === 1) {
+        fallback.aiMessage = `I need ${missingFields[0]} to process your payment.`
+      } else if (fieldCount === 2) {
+        fallback.aiMessage = `I need ${missingFields[0]} and ${missingFields[1]} to create this payment.`
+      } else {
+        const lastField = missingFields.pop()
+        fallback.aiMessage = `I need ${missingFields.join(', ')}, and ${lastField} to process your payment.`
+      }
+    } else {
+      fallback.aiMessage = "I need a few details to process your payment: the amount in USDC (like 0.1 USDC), which network you want to use (Base or Solana), and the payment address. ?"
+    }
   }
   
   return fallback
@@ -208,7 +233,8 @@ function parsePromptFallback(prompt: string): AnalyzedIntent {
   const recipient = domainMatch ? domainMatch[1] : ''
   
   // Extract receiving address (0x... or Solana address)
-  const addressMatch = prompt.match(/(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})/)
+  // Match 0x followed by 40 hex chars, or Solana address (32-44 base58 chars)
+  const addressMatch = prompt.match(/(0x[a-fA-F0-9]{40,42}|[1-9A-HJ-NP-Za-km-z]{32,44})/)
   const receivingAddress = addressMatch ? addressMatch[1] : ''
   
   // Extract currency (USDT, USDT, USDC) - normalize to USDC
@@ -243,7 +269,7 @@ function parsePromptFallback(prompt: string): AnalyzedIntent {
   
   // Add conversion message if currency was converted
   if (currencyConverted) {
-    result.aiMessage = `I've converted USDT to USDC as the system only supports USDC payments.`
+    result.aiMessage = `I've converted USDT to USDC since we only support USDC payments.`
   }
   
   return result

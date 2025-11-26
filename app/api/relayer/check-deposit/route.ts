@@ -1,47 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDepositTracking, markDepositConfirmed } from '@/lib/depositTracking'
 import { checkSwapStatus } from '@/lib/oneClick'
-import { getIntentsAccount } from '@/lib/near'
 
-async function checkDepositStatus(depositAddress: string, swapId?: string) {
+/**
+ * Check deposit status endpoint
+ * Based on: https://github.com/near-examples/near-intents-examples/blob/main/1click-example/5-check-status-OPTIONAL.ts
+ * 
+ * Status values:
+ * - SUCCESS: Intent fulfilled successfully
+ * - REFUNDED: Swap failed and funds were refunded
+ * - PENDING: Still processing
+ * - PENDING_DEPOSIT: Waiting for deposit
+ * - KNOWN_DEPOSIT_TX: Deposit transaction detected
+ * - PROCESSING: Currently processing
+ */
+async function checkDepositStatus(depositAddress: string) {
   try {
-    // If we have a swap ID, check status via 1-Click API
-    if (swapId) {
-      try {
-        const status = await checkSwapStatus(swapId)
-        
-        // Status stages from NEAR Intents examples:
-        // PENDING_DEPOSIT, KNOWN_DEPOSIT_TX, PROCESSING, SUCCESS, REFUNDED
-        if (status.status === 'SUCCESS' || status.status === 'KNOWN_DEPOSIT_TX' || status.status === 'PROCESSING') {
-          return { confirmed: true, status: status.status }
-        }
-        
-        return { confirmed: false, status: status.status }
-      } catch (error) {
-        console.error('Error checking swap status:', error)
-        // Fall through to fallback check
-      }
+    // Check status via 1-Click SDK using deposit address
+    const statusResponse = await checkSwapStatus(depositAddress)
+    
+    // Extract status from SDK response
+    // The SDK returns a response with a 'status' property
+    const status = (statusResponse as any).status || 'PENDING'
+    
+    console.log(`   Current status: ${status}`)
+    
+    // Status stages from NEAR Intents examples:
+    // PENDING_DEPOSIT, KNOWN_DEPOSIT_TX, PROCESSING, SUCCESS, REFUNDED
+    if (status === 'SUCCESS') {
+      console.log('🎉 Intent Fulfilled!')
+      return { confirmed: true, status }
     }
     
-    // Fallback: Check deposit via NEAR Intents contract
-    const account = await getIntentsAccount()
-    
-    // For demo purposes, simulate deposit confirmation after 30 seconds
-    const tracking = getDepositTracking(depositAddress)
-    if (tracking && Date.now() - tracking.createdAt > 30000) {
-      return { confirmed: true, amount: tracking.amount }
+    if (status === 'REFUNDED') {
+      console.log(`❌ Swap failed with status: ${status}`)
+      return { confirmed: false, status, refunded: true }
     }
     
-    return { confirmed: false }
+    // Processing states are not confirmed yet, but indicate progress
+    if (status === 'KNOWN_DEPOSIT_TX' || status === 'PROCESSING') {
+      return { confirmed: false, status, processing: true }
+    }
+    
+    return { confirmed: false, status }
   } catch (error) {
-    console.error('Error checking deposit:', error)
-    return { confirmed: false }
+    console.error('Error checking swap status via 1-Click SDK:', error)
+    return { confirmed: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    // Handle empty or malformed request body
+    let body
+    try {
+      const text = await request.text()
+      if (!text || text.trim() === '') {
+        return NextResponse.json(
+          { error: 'Request body is required' },
+          { status: 400 }
+        )
+      }
+      body = JSON.parse(text)
+    } catch (parseError) {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', details: parseError instanceof Error ? parseError.message : 'Unknown error' },
+        { status: 400 }
+      )
+    }
+
     const { address } = body
 
     if (!address) {
@@ -53,13 +80,12 @@ export async function POST(request: NextRequest) {
 
     const tracking = getDepositTracking(address)
     if (!tracking) {
-      return NextResponse.json({ confirmed: false })
+      return NextResponse.json({ confirmed: false, status: 'PENDING' })
     }
 
-    // Get swap ID from tracking if available
-    const swapId = (tracking as any).swapId
-    const status = await checkDepositStatus(address, swapId)
-    const confirmed = status.confirmed || tracking.confirmed
+    // Check status via 1-Click API
+    const status = await checkDepositStatus(address)
+    const confirmed = status.confirmed
 
     // Mark as confirmed if status check confirms it
     if (status.confirmed && !tracking.confirmed) {
@@ -69,8 +95,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       confirmed,
       intentId: tracking.intentId,
-      status: status.status,
-      swapId,
+      status: status.status || 'PENDING',
+      depositAddress: address,
+      refunded: status.refunded || false,
+      processing: status.processing || false,
     })
   } catch (error) {
     console.error('Error checking deposit:', error)

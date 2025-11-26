@@ -2,15 +2,39 @@
 
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, Check } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface IntentsQRProps {
   depositAddress: string
   amount: string
+  quoteWaitingTimeMs?: number
 }
 
-export function IntentsQR({ depositAddress, amount }: IntentsQRProps) {
+export function IntentsQR({ depositAddress, amount, quoteWaitingTimeMs }: IntentsQRProps) {
   const [copied, setCopied] = useState(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
+
+  // Countdown timer for quote processing time
+  useEffect(() => {
+    if (!quoteWaitingTimeMs) return
+
+    // Initialize countdown with the waiting time in seconds
+    const initialSeconds = Math.ceil(quoteWaitingTimeMs / 1000)
+    setCountdown(initialSeconds)
+
+    // Update countdown every second
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 0) {
+          clearInterval(interval)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [quoteWaitingTimeMs])
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(depositAddress)
@@ -65,6 +89,19 @@ export function IntentsQR({ depositAddress, amount }: IntentsQRProps) {
           <p className="text-xs text-gray-500 text-center mt-2">
             Send ZEC to this shielded address
           </p>
+          {quoteWaitingTimeMs && countdown !== null && (
+            <div className="text-center mt-2">
+              {countdown > 0 ? (
+                <p className="text-xs text-purple-400">
+                  Quote processing: <span className="font-semibold">{countdown}s</span> remaining
+                </p>
+              ) : (
+                <p className="text-xs text-purple-400">
+                  Checking deposit status...
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

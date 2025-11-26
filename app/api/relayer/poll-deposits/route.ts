@@ -1,29 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAllPendingDeposits, markDepositConfirmed, getDepositTracking } from '@/lib/depositTracking'
-import { getContract, getIntentsAccount, CONFIG } from '@/lib/near'
+
+import { checkSwapStatus } from '@/lib/oneClick'
 
 async function checkDepositStatus(depositAddress: string) {
   try {
-    // In production, this would query the NEAR Intents contract
-    const account = await getIntentsAccount()
+    // Check status via 1-Click API using deposit address
+    const statusResponse = await checkSwapStatus(depositAddress)
+    const status = statusResponse.status
     
-    // Mock: Check if deposit exists (in production, use actual view call)
-    // const balance = await account.viewFunction(
-    //   CONFIG.INTENTS_CONTRACT,
-    //   'mt_batch_balance_of',
-    //   { account_id: depositAddress }
-    // )
-    
-    // For demo purposes, simulate deposit confirmation after 30 seconds
-    const tracking = getDepositTracking(depositAddress)
-    if (tracking && Date.now() - tracking.createdAt > 30000) {
-      return { confirmed: true, amount: tracking.amount }
+    // Status stages from NEAR Intents examples:
+    // PENDING_DEPOSIT, KNOWN_DEPOSIT_TX, PROCESSING, SUCCESS, REFUNDED
+    if (status === 'SUCCESS' || status === 'KNOWN_DEPOSIT_TX' || status === 'PROCESSING') {
+      return { confirmed: true, status }
     }
     
-    return { confirmed: false }
+    if (status === 'REFUNDED') {
+      return { confirmed: false, status, refunded: true }
+    }
+    
+    return { confirmed: false, status }
   } catch (error) {
-    console.error('Error checking deposit:', error)
-    return { confirmed: false }
+    console.error('Error checking deposit status via 1-Click API:', error)
+    return { confirmed: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
 
@@ -42,38 +41,21 @@ export async function POST(request: NextRequest) {
       if (status.confirmed) {
         markDepositConfirmed(address)
         
-        // Mark intent as funded in contract
-        try {
-          const contract = await getContract()
-          
-          // Note: These contract calls require proper authentication
-          // In production, you'd need to sign transactions with a relayer key
-          // await contract.mark_funded({
-          //   intent_id: tracking.intentId,
-          // })
-          
-          // Execute x402 payment
-          // await contract.execute_x402_payment({
-          //   intent_id: tracking.intentId,
-          //   amount: tracking.amount,
-          //   recipient: tracking.recipient || CONFIG.CONTRACT_ID,
-          // })
-          
-          results.push({
-            address,
-            intentId: tracking.intentId,
-            status: 'confirmed',
-            message: `Intent ${tracking.intentId} funded and payment executed`,
-          })
-        } catch (error) {
-          console.error(`Error executing payment for ${tracking.intentId}:`, error)
-          results.push({
-            address,
-            intentId: tracking.intentId,
-            status: 'error',
-            error: error instanceof Error ? error.message : 'Unknown error',
-          })
-        }
+        results.push({
+          address,
+          intentId: tracking.intentId,
+          status: 'confirmed',
+          message: `Intent ${tracking.intentId} funded via 1-Click API`,
+          swapStatus: status.status,
+        })
+      } else if (status.refunded) {
+        results.push({
+          address,
+          intentId: tracking.intentId,
+          status: 'refunded',
+          message: `Swap was refunded`,
+          swapStatus: status.status,
+        })
       }
     }
 
@@ -106,36 +88,21 @@ export async function GET() {
       if (status.confirmed) {
         markDepositConfirmed(address)
         
-        try {
-          const contract = await getContract()
-          
-          // Note: These contract calls require proper authentication
-          // In production, you'd need to sign transactions with a relayer key
-          // await contract.mark_funded({
-          //   intent_id: tracking.intentId,
-          // })
-          
-          // await contract.execute_x402_payment({
-          //   intent_id: tracking.intentId,
-          //   amount: tracking.amount,
-          //   recipient: tracking.recipient || CONFIG.CONTRACT_ID,
-          // })
-          
-          results.push({
-            address,
-            intentId: tracking.intentId,
-            status: 'confirmed',
-            message: `Intent ${tracking.intentId} funded and payment executed`,
-          })
-        } catch (error) {
-          console.error(`Error executing payment for ${tracking.intentId}:`, error)
-          results.push({
-            address,
-            intentId: tracking.intentId,
-            status: 'error',
-            error: error instanceof Error ? error.message : 'Unknown error',
-          })
-        }
+        results.push({
+          address,
+          intentId: tracking.intentId,
+          status: 'confirmed',
+          message: `Intent ${tracking.intentId} funded via 1-Click API`,
+          swapStatus: status.status,
+        })
+      } else if (status.refunded) {
+        results.push({
+          address,
+          intentId: tracking.intentId,
+          status: 'refunded',
+          message: `Swap was refunded`,
+          swapStatus: status.status,
+        })
       }
     }
 
