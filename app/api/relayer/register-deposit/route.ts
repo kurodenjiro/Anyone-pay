@@ -37,18 +37,10 @@ export async function POST(request: NextRequest) {
     // From API: nep141:zec.omft.near
     const zcashAsset = ASSETS.ZCASH
 
-    // Create a new NEAR account and Ethereum address using Chain Signatures
-    // Pattern: example.near + <receipt address>-1
+    // Get NEAR proxy account and Ethereum address using Chain Signatures
     // This wallet will be used to receive swap and sign x402 payment
-    if (!recipient) {
-      return NextResponse.json(
-        { error: 'Recipient address is required for Chain Signature wallet generation' },
-        { status: 400 }
-      )
-    }
-    
-    const swapWallet = await generateChainSigWallet(recipient)
-    console.log('Generated NEAR account:', swapWallet.nearAccountId)
+    const swapWallet = await generateChainSigWallet()
+    console.log('Using NEAR proxy account:', swapWallet.nearAccountId)
     console.log('Generated Ethereum address:', swapWallet.ethAddress)
     console.log('Original payment address (x402 recipient):', recipient)
 

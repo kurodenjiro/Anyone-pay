@@ -1,21 +1,24 @@
 // Utility for creating and managing Ethereum wallets for x402 payments using NEAR Chain Signatures
 import { ethers } from 'ethers'
-import { generateNearAccountId, getEthereumAddressFromNearAccount } from './chainSig'
+import { getEthereumAddressFromProxyAccount } from './chainSig'
 
 /**
- * Generate a new NEAR account and Ethereum address for receiving swapped tokens
- * Uses Chain Signatures pattern: example.near + <receipt address>-1
- * @param receiptAddress - User's receipt address (from AI or service)
+ * Get NEAR proxy account and Ethereum address for Chain Signatures
+ * Uses proxy account from environment variables
  * @returns NEAR account ID and Ethereum address
  */
-export async function generateChainSigWallet(
-  receiptAddress: string
-): Promise<{ nearAccountId: string; ethAddress: string }> {
-  // Generate NEAR account ID using pattern: example.near + <receipt address>-1
-  const nearAccountId = generateNearAccountId(receiptAddress)
+export async function generateChainSigWallet(): Promise<{ nearAccountId: string; ethAddress: string }> {
+  // Get account ID from environment
+  const nearAccountId = process.env.NEAR_PROXY_ACCOUNT_ID
+
+  if (!nearAccountId) {
+    throw new Error('NEAR account ID not configured. Set NEAR_PROXY_ACCOUNT_ID in .env')
+  }
+
+  console.log('Using NEAR account for Chain Signatures:', nearAccountId)
   
-  // Get Ethereum address from NEAR account using Chain Signatures
-  const ethAddress = await getEthereumAddressFromNearAccount(nearAccountId)
+  // Get Ethereum address from NEAR proxy account using Chain Signatures
+  const ethAddress = await getEthereumAddressFromProxyAccount()
   
   return {
     nearAccountId,
@@ -91,12 +94,12 @@ export async function signX402PaymentPayload(
     value: amountInWei,
     validAfter: 0,
     validBefore: quote.deadline,
-    nonce: ethers.zeroPadValue(ethers.toBeHex(quote.nonce), 32),
+    nonce: ethers.zeroPadValue(ethers.toBeHex(BigInt(quote.nonce)), 32),
   }
 
   // Sign using Chain Signatures
   const { signTypedDataWithChainSignature } = await import('./chainSig')
-  const signature = await signTypedDataWithChainSignature(nearAccountId, domain, types, value)
+  const signature = await signTypedDataWithChainSignature(domain, types, value)
 
   // Return payload JSON for X-PAYMENT header
   return JSON.stringify({

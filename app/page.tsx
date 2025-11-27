@@ -92,6 +92,12 @@ function HomeContent() {
       
       // Create intent with service data
       const amount = fullService.amount || '0.1'
+      
+      // Ensure receivingAddress is present
+      if (!fullService.receivingAddress) {
+        throw new Error('Service missing receiving address')
+      }
+      
       const { depositAddress, intentId, quoteWaitingTimeMs } = await generateDepositAddress(
         'payment',
         amount,
@@ -104,6 +110,7 @@ function HomeContent() {
             serviceId: fullService.id,
             serviceName: fullService.name,
             chain: fullService.chain,
+            receivingAddress: fullService.receivingAddress, // Ensure this is included
           }
         }
       )
@@ -305,6 +312,13 @@ function HomeContent() {
     const timestamp = Date.now()
     const intentId = `intent-${timestamp}`
     
+    // Get recipient address - required for Chain Signature wallet generation
+    const recipient = parsed.metadata?.receivingAddress || parsed.metadata?.to || parsed.metadata?.recipient || ''
+    
+    if (!recipient) {
+      throw new Error('Recipient address is required to generate deposit address')
+    }
+    
     // Register with relayer - this will get quote from 1-Click API for USDC → Zcash
     // The API will return a real deposit address from 1-Click API
     try {
@@ -315,7 +329,7 @@ function HomeContent() {
           intentId,
           intentType: 'payment', // Always use payment type
           amount,
-          recipient: parsed.metadata?.receivingAddress || parsed.metadata?.to || '',
+          recipient, // Use validated recipient
           senderAddress: '', // Will be set from wallet if available
           chain: parsed.chain || parsed.metadata?.chain || 'base',
           redirectUrl: parsed.redirect_url || parsed.redirectUrl || '',
