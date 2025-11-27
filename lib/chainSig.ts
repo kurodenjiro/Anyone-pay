@@ -18,22 +18,16 @@ const privateKey = NEAR_PROXY_PRIVATE_KEY
 /**
  * Get Ethereum address from NEAR proxy account using Chain Signatures
  * The Ethereum address is derived from the MPC contract
- * Adds a random prefix to avoid duplicate addresses
  */
 export async function getEthereumAddressFromProxyAccount(): Promise<string> {
   if (!accountId) {
     throw new Error('NEAR account ID not configured. Set NEAR_PROXY_ACCOUNT_ID in .env')
   }
 
-  // Generate a random prefix to ensure unique addresses
-  // This prevents duplicate addresses when multiple users use the same proxy account
-  const randomPrefix = Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
-  const uniqueKey = `${accountId}-${randomPrefix}`
-  
   // In Chain Signatures, the Ethereum address is derived from the MPC contract
-  // For now, use a deterministic hash of the account ID with random prefix
+  // For now, use a deterministic hash of the account ID
   // In production, query the MPC contract for the actual Ethereum address
-  const hash = ethers.keccak256(ethers.toUtf8Bytes(uniqueKey))
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(accountId))
   return ethers.getAddress('0x' + hash.slice(-40))
 }
 
