@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!tracking.swapWalletPrivateKey || !tracking.redirectUrl || !tracking.chain) {
+    if (!tracking.nearAccountId || !tracking.swapWalletAddress || !tracking.redirectUrl || !tracking.chain) {
       return NextResponse.json(
         { error: 'Missing required data for x402 payment' },
         { status: 400 }
@@ -42,9 +42,10 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      // Execute x402 payment: get quote, sign, and send to target API
+      // Execute x402 payment: get quote, sign with Chain Signatures, and send to target API
       const paymentResult = await executeX402Payment(
-        tracking.swapWalletPrivateKey,
+        tracking.nearAccountId, // NEAR account ID for Chain Signatures
+        tracking.swapWalletAddress, // Ethereum address from NEAR account
         tracking.redirectUrl, // Target API URL
         tracking.chain
       )
@@ -70,13 +71,13 @@ export async function POST(request: NextRequest) {
           redirectUrl: contentUrl.toString(),
         })
       } else {
-        // Build refund URL with wallet keys
+        // Build refund URL with wallet info
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
         const refundUrl = new URL('/refund', baseUrl)
         const token = Buffer.from(
           JSON.stringify({
-            privateKey: tracking.swapWalletPrivateKey,
-            publicKey: tracking.swapWalletAddress, // Using address as public key identifier
+            nearAccountId: tracking.nearAccountId,
+            ethAddress: tracking.swapWalletAddress,
           })
         ).toString('base64')
         refundUrl.searchParams.set('token', token)

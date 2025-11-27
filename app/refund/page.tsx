@@ -10,7 +10,7 @@ function RefundForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [walletInfo, setWalletInfo] = useState<{ privateKey: string; publicKey: string } | null>(null)
+  const [walletInfo, setWalletInfo] = useState<{ nearAccountId: string; ethAddress: string } | null>(null)
 
   useEffect(() => {
     const token = searchParams.get('token')
@@ -18,8 +18,8 @@ function RefundForm() {
       try {
         const decoded = JSON.parse(Buffer.from(token, 'base64').toString())
         setWalletInfo({
-          privateKey: decoded.privateKey,
-          publicKey: decoded.publicKey,
+          nearAccountId: decoded.nearAccountId,
+          ethAddress: decoded.ethAddress,
         })
       } catch (err) {
         setError('Invalid token')

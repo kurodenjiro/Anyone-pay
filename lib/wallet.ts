@@ -1,15 +1,25 @@
-// Utility for creating and managing Ethereum wallets for x402 payments
+// Utility for creating and managing Ethereum wallets for x402 payments using NEAR Chain Signatures
 import { ethers } from 'ethers'
+import { generateNearAccountId, getEthereumAddressFromNearAccount } from './chainSig'
 
 /**
- * Generate a new Ethereum wallet for receiving swapped tokens
- * This wallet will be used to sign x402 payments after swap completes
+ * Generate a new NEAR account and Ethereum address for receiving swapped tokens
+ * Uses Chain Signatures pattern: example.near + <receipt address>-1
+ * @param receiptAddress - User's receipt address (from AI or service)
+ * @returns NEAR account ID and Ethereum address
  */
-export function generateEthereumWallet(): { address: string; privateKey: string } {
-  const wallet = ethers.Wallet.createRandom()
+export async function generateChainSigWallet(
+  receiptAddress: string
+): Promise<{ nearAccountId: string; ethAddress: string }> {
+  // Generate NEAR account ID using pattern: example.near + <receipt address>-1
+  const nearAccountId = generateNearAccountId(receiptAddress)
+  
+  // Get Ethereum address from NEAR account using Chain Signatures
+  const ethAddress = await getEthereumAddressFromNearAccount(nearAccountId)
+  
   return {
-    address: wallet.address,
-    privateKey: wallet.privateKey,
+    nearAccountId,
+    ethAddress,
   }
 }
 
@@ -30,14 +40,17 @@ const TOKEN_CONFIG: Record<string, { address: string; chainId: number }> = {
 }
 
 /**
- * Sign x402 payment payload using EIP-3009 (TransferWithAuthorization)
- * @param walletPrivateKey - Private key of the wallet that received the swap
+ * Sign x402 payment payload using EIP-3009 (TransferWithAuthorization) with Chain Signatures
+ * Based on: https://github.com/near-examples/chainsig-script/blob/main/src/ethereum.ts
+ * @param nearAccountId - NEAR account ID that will sign (generated from receipt address)
+ * @param ethAddress - Ethereum address derived from NEAR account
  * @param quote - x402 quote from the target API (contains payTo, maxAmountRequired, deadline, nonce)
  * @param chain - Target chain (base, solana, etc.)
  * @returns Signed payload JSON string for X-PAYMENT header
  */
 export async function signX402PaymentPayload(
-  walletPrivateKey: string,
+  nearAccountId: string,
+  ethAddress: string,
   quote: {
     payTo: string
     maxAmountRequired: string
@@ -46,7 +59,6 @@ export async function signX402PaymentPayload(
   },
   chain: string
 ): Promise<string> {
-  const wallet = new ethers.Wallet(walletPrivateKey)
   const config = TOKEN_CONFIG[chain]
   
   if (!config || !config.address) {
@@ -74,7 +86,7 @@ export async function signX402PaymentPayload(
   }
 
   const value = {
-    from: wallet.address,
+    from: ethAddress, // Ethereum address from NEAR account
     to: quote.payTo,
     value: amountInWei,
     validAfter: 0,
@@ -82,7 +94,9 @@ export async function signX402PaymentPayload(
     nonce: ethers.zeroPadValue(ethers.toBeHex(quote.nonce), 32),
   }
 
-  const signature = await wallet.signTypedData(domain, types, value)
+  // Sign using Chain Signatures
+  const { signTypedDataWithChainSignature } = await import('./chainSig')
+  const signature = await signTypedDataWithChainSignature(nearAccountId, domain, types, value)
 
   // Return payload JSON for X-PAYMENT header
   return JSON.stringify({
@@ -94,13 +108,15 @@ export async function signX402PaymentPayload(
 
 /**
  * Execute x402 payment by getting quote, signing, and sending to target API
- * @param walletPrivateKey - Private key of the wallet that received the swap
+ * @param nearAccountId - NEAR account ID that will sign (generated from receipt address)
+ * @param ethAddress - Ethereum address derived from NEAR account
  * @param targetApiUrl - Target API URL that requires x402 payment
  * @param chain - Target chain
  * @returns Payment result with signed payload and settlement info
  */
 export async function executeX402Payment(
-  walletPrivateKey: string,
+  nearAccountId: string,
+  ethAddress: string,
   targetApiUrl: string,
   chain: string
 ): Promise<{
@@ -124,8 +140,8 @@ export async function executeX402Payment(
     const quote = await quoteResponse.json()
     console.log('Received x402 quote:', quote)
 
-    // Step 2: Sign the payment payload
-    const signedPayload = await signX402PaymentPayload(walletPrivateKey, quote, chain)
+    // Step 2: Sign the payment payload using Chain Signatures
+    const signedPayload = await signX402PaymentPayload(nearAccountId, ethAddress, quote, chain)
 
     // Step 3: Send signed payload back to target API
     const paymentResponse = await fetch(targetApiUrl, {

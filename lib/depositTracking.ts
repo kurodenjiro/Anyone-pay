@@ -4,8 +4,8 @@ interface DepositTracking {
   intentId: string
   amount: string
   recipient?: string // Original payment address from AI (for x402)
-  swapWalletAddress?: string // Newly created wallet address (receives swap, signs x402)
-  swapWalletPrivateKey?: string // Private key for signing x402
+  swapWalletAddress?: string // Ethereum address from NEAR account (receives swap, signs x402)
+  nearAccountId?: string // NEAR account ID for Chain Signatures (pattern: example.near + <receipt>-1)
   createdAt: number
   confirmed: boolean
   confirmedAt?: number
@@ -26,8 +26,8 @@ export function registerDeposit(
   recipient?: string, // Original payment address from AI
   swapId?: string,
   intentType?: string,
-  swapWalletAddress?: string, // New wallet for receiving swap
-  swapWalletPrivateKey?: string, // Private key for signing x402
+  swapWalletAddress?: string, // Ethereum address from NEAR account
+  nearAccountId?: string, // NEAR account ID for Chain Signatures
   chain?: string, // Target chain
   redirectUrl?: string // Original redirect URL for content
 ) {
@@ -35,8 +35,8 @@ export function registerDeposit(
     intentId,
     amount,
     recipient, // Original x402 payment address
-    swapWalletAddress, // New wallet that receives swap
-    swapWalletPrivateKey, // For signing x402
+    swapWalletAddress, // Ethereum address from NEAR account
+    nearAccountId, // NEAR account for Chain Signatures
     createdAt: Date.now(),
     confirmed: false,
     swapId,

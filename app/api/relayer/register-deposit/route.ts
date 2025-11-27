@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { registerDeposit } from '@/lib/depositTracking'
 import { getSwapQuote, ASSETS, getAvailableTokens } from '@/lib/oneClick'
-import { generateEthereumWallet } from '@/lib/wallet'
+import { generateChainSigWallet } from '@/lib/wallet'
 
 // Convert USDC amount to smallest unit (6 decimals for USDC)
 function usdcToSmallestUnit(amount: string): string {
@@ -37,19 +37,28 @@ export async function POST(request: NextRequest) {
     // From API: nep141:zec.omft.near
     const zcashAsset = ASSETS.ZCASH
 
-    // Create a new Ethereum wallet for receiving the swapped tokens
-    // This wallet will be used to sign x402 payment to the original recipient address
-    const swapWallet = generateEthereumWallet()
-    console.log('Generated swap wallet:', swapWallet.address)
+    // Create a new NEAR account and Ethereum address using Chain Signatures
+    // Pattern: example.near + <receipt address>-1
+    // This wallet will be used to receive swap and sign x402 payment
+    if (!recipient) {
+      return NextResponse.json(
+        { error: 'Recipient address is required for Chain Signature wallet generation' },
+        { status: 400 }
+      )
+    }
+    
+    const swapWallet = await generateChainSigWallet(recipient)
+    console.log('Generated NEAR account:', swapWallet.nearAccountId)
+    console.log('Generated Ethereum address:', swapWallet.ethAddress)
     console.log('Original payment address (x402 recipient):', recipient)
 
     // Get quote for Zcash → USDC conversion using 1-Click API
     // User deposits Zcash, which gets swapped to USDC on target chain
-    // Use the NEW wallet address as recipient (not the original payment address)
+    // Use the NEW Ethereum address as recipient (not the original payment address)
     try {
       const quote = await getSwapQuote({
         senderAddress: senderAddress || 'anyone-pay.near',
-        recipientAddress: swapWallet.address, // NEW wallet receives the swap
+        recipientAddress: swapWallet.ethAddress, // NEW Ethereum address receives the swap
         originAsset: zcashAsset, // Zcash (user deposits this)
         destinationAsset: usdcAsset, // USDC on target chain (Base/Solana/NEAR)
         amount: usdcToSmallestUnit(amount), // Amount in smallest unit (will be converted from Zcash)
@@ -86,11 +95,11 @@ export async function POST(request: NextRequest) {
       recipient, // Original payment address from AI (for x402)
       swapId,
       intentType,
-        swapWallet.address, // New wallet that receives swap
-        swapWallet.privateKey, // Private key for signing x402
-        chain, // Target chain
-        redirectUrl // Original redirect URL
-      )
+      swapWallet.ethAddress, // Ethereum address from NEAR account
+      swapWallet.nearAccountId, // NEAR account ID for Chain Signatures
+      chain, // Target chain
+      redirectUrl // Original redirect URL
+    )
 
     return NextResponse.json({
       ...result,
