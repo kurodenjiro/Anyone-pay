@@ -53,6 +53,8 @@ function HomeContent() {
   const [pollingAttempt, setPollingAttempt] = useState(0) // Current polling attempt number
   const [countdown, setCountdown] = useState<number | null>(null) // Countdown after deposit address creation
   const [timeEstimate, setTimeEstimate] = useState<number | null>(null) // Time estimate from swap status
+  const [x402Status, setX402Status] = useState<string | null>(null) // x402 payment status
+  const [redirectInfo, setRedirectInfo] = useState<{ url?: string; message?: string } | null>(null) // Redirect information
 
   useEffect(() => {
     // Check if service ID is in URL
@@ -98,7 +100,7 @@ function HomeContent() {
         throw new Error('Service missing receiving address')
       }
       
-      const { depositAddress, intentId, quoteWaitingTimeMs } = await generateDepositAddress(
+      const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount } = await generateDepositAddress(
         'payment',
         amount,
         {
@@ -118,7 +120,7 @@ function HomeContent() {
       setIntentData({
         type: 'payment',
         depositAddress,
-        amount,
+        amount: zcashAmount || amount, // Use Zcash amount if available, otherwise fallback to USDC amount
         redirectUrl: fullService.url,
         chain: fullService.chain,
         needsBridge: true,
@@ -227,18 +229,16 @@ function HomeContent() {
       if (isComplete) {
         // Full payment data available - generate QR code
         // Currency conversion message is informational only, doesn't block payment
-        const { depositAddress, intentId, quoteWaitingTimeMs } = await generateDepositAddress(parsed.type, amount, parsed)
+        const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount } = await generateDepositAddress(parsed.type, amount, parsed)
         
-        // Store target API URL for content page
+        // Target API URL is now stored in database (depositTracking) via registerDeposit
+        // No need to store in localStorage anymore
         const targetApiUrl = parsed.redirect_url || parsed.redirectUrl || ''
-        if (targetApiUrl) {
-          localStorage.setItem('targetApiUrl', targetApiUrl)
-        }
         
         setIntentData({
           type: parsed.type,
           depositAddress,
-          amount,
+          amount: zcashAmount || amount, // Use Zcash amount if available, otherwise fallback to USDC amount
           redirectUrl: targetApiUrl,
           chain: parsed.chain || parsed.metadata?.chain,
           needsBridge: parsed.needsBridge ?? parsed.metadata?.needsBridge,
@@ -308,7 +308,7 @@ function HomeContent() {
     intentType: string, 
     amount: string,
     parsed: any
-  ): Promise<{ depositAddress: string; intentId: string; quoteWaitingTimeMs?: number }> => {
+  ): Promise<{ depositAddress: string; intentId: string; quoteWaitingTimeMs?: number; zcashAmount?: string }> => {
     const timestamp = Date.now()
     const intentId = `intent-${timestamp}`
     
@@ -351,7 +351,8 @@ function HomeContent() {
       return { 
         depositAddress: data.depositAddress, 
         intentId,
-        quoteWaitingTimeMs: data.quoteWaitingTimeMs
+        quoteWaitingTimeMs: data.quoteWaitingTimeMs,
+        zcashAmount: data.zcashAmount // Amount of Zcash user needs to deposit
       }
     } catch (error) {
       console.error('Failed to register deposit:', error)
@@ -402,16 +403,41 @@ function HomeContent() {
           // Execute x402 payment after swap completes
           // The swap wallet will sign and send payment to the original recipient address
           try {
+            // Step 1: Sign x402 payment
+            setX402Status('Signing x402 payment...')
+            setRedirectInfo({ message: 'Preparing payment signature...' })
+            
             const x402Response = await fetch('/api/relayer/execute-x402', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ depositAddress: address }),
             })
             
+            if (!x402Response.ok) {
+              console.error('x402 API error:', x402Response.status, x402Response.statusText)
+              const errorText = await x402Response.text()
+              console.error('Error response:', errorText)
+              setX402Status('x402 payment failed')
+              setRedirectInfo({ message: `Payment failed: ${x402Response.status}` })
+              throw new Error(`x402 payment failed: ${x402Response.status} ${x402Response.statusText}`)
+            }
+            
             const x402Data = await x402Response.json()
+            
+            // Step 2: Get redirect URL
+            setX402Status('x402 payment signed')
+            setRedirectInfo({ message: 'Getting redirect URL...' })
             
             if (x402Data.success && x402Data.redirectUrl) {
               console.log('✅ x402 payment executed:', x402Data)
+              
+              // Step 3: Redirect information
+              setX402Status('x402 payment completed')
+              setRedirectInfo({ 
+                url: x402Data.redirectUrl,
+                message: 'Redirecting to premium content...' 
+              })
+              
               // Redirect to content page with signed payload
               setDepositConfirmed(true)
               setTimeout(() => {
@@ -421,6 +447,11 @@ function HomeContent() {
             } else if (x402Data.redirectUrl) {
               // Redirect to refund page
               console.log('⚠️ x402 payment failed, redirecting to refund:', x402Data.error)
+              setX402Status('x402 payment failed')
+              setRedirectInfo({ 
+                url: x402Data.redirectUrl,
+                message: 'Redirecting to refund page...' 
+              })
               setDepositConfirmed(true)
               setTimeout(() => {
                 window.location.href = x402Data.redirectUrl
@@ -429,6 +460,8 @@ function HomeContent() {
             }
           } catch (error) {
             console.error('Error executing x402 payment:', error)
+            setX402Status('x402 payment error')
+            setRedirectInfo({ message: error instanceof Error ? error.message : 'Unknown error' })
           }
           
           setDepositConfirmed(true)
@@ -489,6 +522,8 @@ function HomeContent() {
     setPollingAttempt(0)
     setCountdown(null)
     setTimeEstimate(null)
+    setX402Status(null)
+    setRedirectInfo(null)
     
     // Clear URL parameters and go to home
     const newUrl = new URL(window.location.href)
@@ -635,8 +670,38 @@ function HomeContent() {
             </motion.div>
           )}
 
+          {/* x402 Payment Status */}
+          {x402Status && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-4 shadow-xl shadow-purple-500/10"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <div>
+                    <p className="text-sm text-white">
+                      {x402Status}
+                    </p>
+                    {redirectInfo?.message && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        {redirectInfo.message}
+                      </p>
+                    )}
+                    {redirectInfo?.url && (
+                      <p className="text-xs text-purple-400 mt-1 font-mono truncate max-w-md">
+                        {redirectInfo.url}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Status message */}
-          {depositConfirmed && (
+          {depositConfirmed && !x402Status && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

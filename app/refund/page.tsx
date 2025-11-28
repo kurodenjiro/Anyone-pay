@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { getSwapQuote, ASSETS } from '@/lib/oneClick'
+import { getEthereumAddressFromProxyAccount } from '@/lib/chainSig'
 
 function RefundForm() {
   const searchParams = useSearchParams()
@@ -10,16 +11,17 @@ function RefundForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [walletInfo, setWalletInfo] = useState<{ nearAccountId: string; ethAddress: string } | null>(null)
+  const [refundInfo, setRefundInfo] = useState<{ amount: string; chain: string; recipient: string } | null>(null)
 
   useEffect(() => {
     const token = searchParams.get('token')
     if (token) {
       try {
         const decoded = JSON.parse(Buffer.from(token, 'base64').toString())
-        setWalletInfo({
-          nearAccountId: decoded.nearAccountId,
-          ethAddress: decoded.ethAddress,
+        setRefundInfo({
+          amount: decoded.amount,
+          chain: decoded.chain,
+          recipient: decoded.recipient,
         })
       } catch (err) {
         setError('Invalid token')
@@ -29,7 +31,7 @@ function RefundForm() {
 
   const handleRefund = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!zcashAddress || !walletInfo) {
+    if (!zcashAddress || !refundInfo) {
       setError('Please enter Zcash address')
       return
     }
@@ -38,22 +40,62 @@ function RefundForm() {
     setError(null)
 
     try {
-      // Get quote for refund: USDC → Zcash swap
+      // Get derived Ethereum address from NEAR proxy account
+      const ethAddress = await getEthereumAddressFromProxyAccount()
+      
+      // Get USDC asset ID based on chain
+      let usdcAsset = ASSETS.USDC_NEAR
+      if (refundInfo.chain === 'base') {
+        usdcAsset = ASSETS.USDC_BASE
+      } else if (refundInfo.chain === 'solana') {
+        usdcAsset = ASSETS.USDC_SOLANA
+      }
+
+      // Convert amount to smallest unit (6 decimals for USDC)
+      const amountInSmallestUnit = (parseFloat(refundInfo.amount) * 1e6).toString()
+
+      // Get quote for refund: USDC → Zcash swap using NEAR Intent
       // The swap will send Zcash to the user's provided address
       const quote = await getSwapQuote({
-        senderAddress: walletInfo.publicKey,
+        senderAddress: 'anyone-pay.near',
         recipientAddress: zcashAddress, // User's Zcash address
-        originAsset: ASSETS.USDC_BASE, // USDC on Base (from the failed swap)
+        originAsset: usdcAsset, // USDC on target chain (from the failed swap)
         destinationAsset: ASSETS.ZCASH, // Zcash
-        amount: '100000', // Example amount - should be from tracking
+        amount: amountInSmallestUnit,
         dry: false,
       })
 
-      // TODO: Send transaction using walletInfo.privateKey
-      // This would use the wallet to send USDC to NEAR Intent deposit address
-      // Then swap Zcash and refund to user's Zcash address
+      // Use NEAR Intent to transfer USDC from derived Ethereum address
+      // The NEAR Intent will handle the transfer and swap
+      const refundResponse = await fetch('/api/relayer/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ethAddress, // Derived Ethereum address (has the USDC)
+          zcashAddress, // User's Zcash address
+          amount: refundInfo.amount,
+          chain: refundInfo.chain,
+          depositAddress: quote.depositAddress || quote.quote?.depositAddress || quote.address,
+        }),
+      })
 
-      setSuccess(true)
+      if (!refundResponse.ok) {
+        const errorData = await refundResponse.json()
+        throw new Error(errorData.error || 'Failed to process refund')
+      }
+
+      const refundData = await refundResponse.json()
+      console.log('Refund initiated:', refundData)
+
+      if (refundData.success) {
+        setSuccess(true)
+        // Show success message with instructions
+        setTimeout(() => {
+          alert(`Refund initiated! ${refundData.instructions || 'Please complete the transfer to process the refund.'}`)
+        }, 100)
+      } else {
+        throw new Error(refundData.error || 'Failed to initiate refund')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process refund')
     } finally {
@@ -66,7 +108,7 @@ function RefundForm() {
       <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-8 max-w-md w-full">
         <h1 className="text-2xl font-bold text-white mb-6">Refund Request</h1>
         
-        {!walletInfo ? (
+        {!refundInfo ? (
           <p className="text-red-400">Invalid refund token</p>
         ) : (
           <form onSubmit={handleRefund} className="space-y-4">
@@ -96,7 +138,7 @@ function RefundForm() {
             {success && (
               <div className="bg-green-500/10 border border-green-500/50 rounded-lg p-3">
                 <p className="text-green-400 text-sm">
-                  Refund request submitted. Your Zcash will be sent to the provided address after swap completes.
+                  Refund request submitted. The system will transfer USDC from the derived Ethereum address and swap to Zcash, sending it to your provided address.
                 </p>
               </div>
             )}

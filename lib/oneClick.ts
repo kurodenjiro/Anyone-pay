@@ -65,12 +65,12 @@ export async function getSwapQuote(params: {
   try {
     const quoteRequest: QuoteRequest = {
       dry: params.dry ?? false, // false for actual execution
-      swapType: 'EXACT_INPUT',
+      swapType: 'EXACT_OUTPUT', // We know the USDC output amount, need to know Zcash input amount
       slippageTolerance: 100, // 1% slippage
       originAsset: params.originAsset,
       depositType: 'ORIGIN_CHAIN',
       destinationAsset: params.destinationAsset,
-      amount: params.amount,
+      amount: params.amount, // This is the USDC amount we want (output)
       refundTo: process.env.REFUND_ZCASH_ADDRESS || params.senderAddress,
       refundType: 'ORIGIN_CHAIN',
       recipient: params.recipientAddress,
@@ -118,7 +118,7 @@ export async function checkSwapStatus(depositAddress: string) {
   try {
     // Use official SDK method
     const status = await OneClickService.getExecutionStatus(depositAddress)
-    console.log('Swap status from 1-Click SDK:', status)
+    console.log('Swap status from 1-Click SDK:', status, depositAddress)
     return status
   } catch (error) {
     console.error('Error checking swap status:', error)

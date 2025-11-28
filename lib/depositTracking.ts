@@ -68,3 +68,16 @@ export function getAllPendingDeposits(): Array<[string, DepositTracking]> {
   )
 }
 
+/**
+ * Get deposit tracking by swap wallet address (Ethereum address)
+ * Used to find the redirectUrl for content page
+ */
+export function getDepositTrackingBySwapWallet(swapWalletAddress: string): DepositTracking | undefined {
+  for (const [_, tracking] of depositTracking.entries()) {
+    if (tracking.swapWalletAddress?.toLowerCase() === swapWalletAddress.toLowerCase()) {
+      return tracking
+    }
+  }
+  return undefined
+}
+

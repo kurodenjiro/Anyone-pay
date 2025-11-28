@@ -12,17 +12,36 @@ function ContentDisplay() {
   useEffect(() => {
     const signedPayload = searchParams.get('signedPayload')
     const address = searchParams.get('address')
-    const targetApiUrl = localStorage.getItem('targetApiUrl')
 
-    if (!signedPayload || !targetApiUrl) {
-      setError('Missing signed payload or target API URL')
+    if (!signedPayload || !address) {
+      setError('Missing signed payload or address')
       setLoading(false)
       return
     }
 
-    // Fetch content using x402 signed payload
+    // Fetch target API URL from database
     const fetchContent = async () => {
       try {
+        // First, get the target API URL from database
+        const urlResponse = await fetch(`/api/content/get-url?address=${encodeURIComponent(address)}`)
+        
+        if (!urlResponse.ok) {
+          const errorData = await urlResponse.json()
+          setError(errorData.error || 'Failed to get target API URL from database')
+          setLoading(false)
+          return
+        }
+
+        const urlData = await urlResponse.json()
+        const targetApiUrl = urlData.redirectUrl
+
+        if (!targetApiUrl) {
+          setError('Target API URL not found in database')
+          setLoading(false)
+          return
+        }
+
+        // Fetch content using x402 signed payload
         const response = await fetch(targetApiUrl, {
           method: 'GET',
           headers: {

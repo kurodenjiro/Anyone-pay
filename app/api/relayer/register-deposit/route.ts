@@ -93,12 +93,111 @@ export async function POST(request: NextRequest) {
       redirectUrl // Original redirect URL
     )
 
+    // Extract Zcash deposit amount from quote
+    // The quote shows how much Zcash is needed to get the requested USDC amount
+    // We requested EXACT_OUTPUT (USDC amount), so the quote should tell us the input amount (Zcash)
+    let zcashAmount: string | undefined = undefined
+    
+    // Log quote structure for debugging
+    console.log('Quote data structure:', JSON.stringify(quoteData, null, 2))
+    
+    // The quote response structure may vary - check multiple possible locations
+    const quoteResponse = quoteData?.quote || quoteData
+    
+    // Try to find the Zcash amount in various possible locations
+    let zcashAmountInSmallestUnit: string | number | undefined
+    
+    // Check for amountInFormatted (formatted Zcash amount to deposit) - highest priority
+    if (quoteResponse?.amountInFormatted) {
+      // If it's already formatted, use it directly (remove trailing zeros)
+      zcashAmount = quoteResponse.amountInFormatted.toString().replace(/\.?0+$/, '')
+      console.log('✅ Found amountInFormatted:', zcashAmount, 'ZEC')
+    }
+    // Check top level amountInFormatted
+    else if (quoteData?.amountInFormatted) {
+      zcashAmount = quoteData.amountInFormatted.toString().replace(/\.?0+$/, '')
+      console.log('✅ Found top-level amountInFormatted:', zcashAmount, 'ZEC')
+    }
+    // Check for amountIn (raw amount in smallest unit)
+    else if (quoteResponse?.amountIn) {
+      zcashAmountInSmallestUnit = quoteResponse.amountIn
+      console.log('Found amountIn:', zcashAmountInSmallestUnit)
+    }
+    // Check for originAmount (amount of origin asset = Zcash)
+    else if (quoteResponse?.originAmount) {
+      zcashAmountInSmallestUnit = quoteResponse.originAmount
+      console.log('Found originAmount:', zcashAmountInSmallestUnit)
+    } 
+    // Check for inputAmount
+    else if (quoteResponse?.inputAmount) {
+      zcashAmountInSmallestUnit = quoteResponse.inputAmount
+      console.log('Found inputAmount:', zcashAmountInSmallestUnit)
+    }
+    // Check for fromAmount
+    else if (quoteResponse?.fromAmount) {
+      zcashAmountInSmallestUnit = quoteResponse.fromAmount
+      console.log('Found fromAmount:', zcashAmountInSmallestUnit)
+    }
+    // Check for estimatedOriginAmount
+    else if (quoteResponse?.estimatedOriginAmount) {
+      zcashAmountInSmallestUnit = quoteResponse.estimatedOriginAmount
+      console.log('Found estimatedOriginAmount:', zcashAmountInSmallestUnit)
+    }
+    // Check top level originAmount
+    else if (quoteData?.originAmount) {
+      zcashAmountInSmallestUnit = quoteData.originAmount
+      console.log('Found top-level originAmount:', zcashAmountInSmallestUnit)
+    }
+    
+    // Convert from smallest unit (Zcash has 8 decimals) if we found raw amount
+    if (zcashAmount === undefined && zcashAmountInSmallestUnit !== undefined) {
+      try {
+        const zcashInSmallestUnit = BigInt(zcashAmountInSmallestUnit.toString())
+        // Convert to number and remove trailing zeros
+        const zcashAmountNum = Number(zcashInSmallestUnit) / 1e8
+        // Format to remove trailing zeros, but keep up to 8 decimal places if needed
+        zcashAmount = zcashAmountNum.toString().replace(/\.?0+$/, '')
+        console.log('✅ Extracted Zcash amount from smallest unit:', zcashAmount, 'ZEC')
+      } catch (error) {
+        console.error('Error converting Zcash amount:', error)
+        // If conversion fails, try to calculate from exchange rate or price
+        const usdcAmount = parseFloat(amount)
+        if (quoteResponse?.rate || quoteResponse?.exchangeRate) {
+          try {
+            const rate = parseFloat((quoteResponse.rate || quoteResponse.exchangeRate).toString())
+            const zcashAmountNum = usdcAmount / rate
+            zcashAmount = zcashAmountNum.toString().replace(/\.?0+$/, '')
+            console.log('✅ Calculated Zcash amount from rate:', zcashAmount, 'ZEC')
+          } catch (rateError) {
+            console.error('Error calculating from rate:', rateError)
+          }
+        } else if (quoteResponse?.price || quoteData?.price) {
+          try {
+            const zcashPrice = parseFloat((quoteResponse.price || quoteData.price).toString())
+            const zcashAmountNum = usdcAmount / zcashPrice
+            zcashAmount = zcashAmountNum.toString().replace(/\.?0+$/, '')
+            console.log('✅ Calculated Zcash amount from price:', zcashAmount, 'ZEC')
+          } catch (priceError) {
+            console.error('Error calculating from price:', priceError)
+          }
+        }
+      }
+    }
+    
+    // If we still don't have a Zcash amount, log warning (don't use fallback)
+    if (zcashAmount === undefined) {
+      console.warn('⚠️ Could not find Zcash amount in quote. Available keys:', Object.keys(quoteResponse || {}))
+      console.warn('⚠️ Full quote data:', quoteData)
+      // Don't set a fallback - let it be undefined so the frontend can handle it
+    }
+
     return NextResponse.json({
       ...result,
       depositAddress,
       swapId,
       quote: quoteData?.quote,
       quoteWaitingTimeMs: quoteData?.quoteWaitingTimeMs || 3000, // Default 3 seconds
+      ...(zcashAmount !== undefined && { zcashAmount }), // Only include if found (amountInFormatted extracted)
     })
   } catch (error) {
     console.error('Error registering deposit:', error)

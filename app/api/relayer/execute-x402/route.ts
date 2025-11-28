@@ -8,8 +8,12 @@ import { executeX402Payment } from '@/lib/wallet'
  */
 export async function POST(request: NextRequest) {
   try {
+    console.log('📥 POST /api/relayer/execute-x402 called')
+    
     const body = await request.json()
     const { depositAddress } = body
+
+    console.log('Request body:', { depositAddress })
 
     if (!depositAddress) {
       return NextResponse.json(
@@ -71,15 +75,16 @@ export async function POST(request: NextRequest) {
           redirectUrl: contentUrl.toString(),
         })
       } else {
-        // Build refund URL with wallet info
+        // Build refund URL with signed payload only
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
         const refundUrl = new URL('/refund', baseUrl)
-        const token = Buffer.from(
-          JSON.stringify({
-            nearAccountId: tracking.nearAccountId,
-            ethAddress: tracking.swapWalletAddress,
-          })
-        ).toString('base64')
+        // Create a signed payload for refund (contains payment info)
+        const refundPayload = JSON.stringify({
+          amount: tracking.amount,
+          chain: tracking.chain,
+          recipient: tracking.recipient,
+        })
+        const token = Buffer.from(refundPayload).toString('base64')
         refundUrl.searchParams.set('token', token)
 
         return NextResponse.json({
