@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const tracking = getDepositTracking(address)
+    const tracking = await getDepositTracking(address)
     
     // Check status via 1-Click API (works even without tracking data)
     const status = await checkDepositStatus(address, tracking)
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     // Mark as confirmed if status check confirms it and we have tracking
     if (tracking && status.confirmed && !tracking.confirmed) {
-      markDepositConfirmed(address)
+      await markDepositConfirmed(address)
     }
 
     // Use the statusResponse from checkDepositStatus instead of making a duplicate call

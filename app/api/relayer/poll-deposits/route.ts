@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     // This endpoint can be called periodically (e.g., via Vercel Cron Jobs)
     // or triggered by the frontend
-    const pendingDeposits = getAllPendingDeposits()
+    const pendingDeposits = await getAllPendingDeposits()
     const results = []
 
     for (const [address, tracking] of pendingDeposits) {
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       const status = await checkDepositStatus(address)
       
       if (status.confirmed) {
-        markDepositConfirmed(address)
+        await markDepositConfirmed(address)
         
         results.push({
           address,
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 // Also support GET for easy cron job setup
 export async function GET() {
   try {
-    const pendingDeposits = getAllPendingDeposits()
+    const pendingDeposits = await getAllPendingDeposits()
     const results = []
 
     for (const [address, tracking] of pendingDeposits) {
@@ -86,7 +86,7 @@ export async function GET() {
       const status = await checkDepositStatus(address)
       
       if (status.confirmed) {
-        markDepositConfirmed(address)
+        await markDepositConfirmed(address)
         
         results.push({
           address,

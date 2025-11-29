@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     console.log('🔄 Cronjob: Checking deposit statuses...')
     
     // Get all deposits with deadline still remaining
-    const deposits = getDepositsWithDeadlineRemaining()
+    const deposits = await getDepositsWithDeadlineRemaining()
     console.log(`📦 Found ${deposits.length} deposits with deadline remaining`)
 
     const results = []
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 
             if (paymentResult.success && paymentResult.signedPayload) {
               // Save signedPayload to DB
-              updateDepositTracking(depositAddress, {
+              await updateDepositTracking(depositAddress, {
                 signedPayload: paymentResult.signedPayload,
                 x402Executed: true,
                 confirmed: true,

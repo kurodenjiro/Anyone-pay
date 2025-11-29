@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const tracking = getDepositTracking(depositAddress)
+    const tracking = await getDepositTracking(depositAddress)
     if (!tracking) {
       return NextResponse.json(
         { error: 'Deposit tracking not found' },
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
       if (paymentResult.success) {
         // Mark x402 as executed and save signedPayload to DB
-        updateDepositTracking(depositAddress, {
+        await updateDepositTracking(depositAddress, {
           signedPayload: paymentResult.signedPayload,
           x402Executed: true,
           confirmed: true,

@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       const a = await submitTxHash(txHash, depositAddress)
       console.log(a)
       // Update tracking
-      updateDepositTracking(depositAddress, {
+      await updateDepositTracking(depositAddress, {
         txHashSubmitted: true,
         depositTxHash: txHash
       })

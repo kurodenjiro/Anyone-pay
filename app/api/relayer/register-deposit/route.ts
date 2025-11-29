@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     // Register deposit tracking
     // Store both: original payment address (for x402) and new wallet (for swap recipient)
-    const result = registerDeposit(
+    const result = await registerDeposit(
       depositAddress,
       intentId,
       amount,

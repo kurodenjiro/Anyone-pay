@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up deposit tracking by swap wallet address
-    const tracking = getDepositTrackingBySwapWallet(address)
+    const tracking = await getDepositTrackingBySwapWallet(address)
 
     if (!tracking || !tracking.redirectUrl) {
       return NextResponse.json(
