@@ -14,6 +14,11 @@ interface DepositTracking {
   chain?: string // Target chain for x402 payment
   x402Executed?: boolean // Whether x402 payment has been executed
   redirectUrl?: string // Original redirect URL for content
+  txHashSubmitted?: boolean // Whether transaction hash has been submitted to speed up process
+  depositTxHash?: string // Transaction hash of the deposit (if available)
+  quoteData?: any // Full quote data from 1-Click API
+  deadline?: string // ISO 8601 format deadline from quote
+  signedPayload?: string // Signed x402 payment payload (stored after execution)
 }
 
 // In-memory store (for demo - use a database in production)
@@ -29,7 +34,9 @@ export function registerDeposit(
   swapWalletAddress?: string, // Ethereum address from NEAR account
   nearAccountId?: string, // NEAR account ID for Chain Signatures
   chain?: string, // Target chain
-  redirectUrl?: string // Original redirect URL for content
+  redirectUrl?: string, // Original redirect URL for content
+  quoteData?: any, // Full quote data from 1-Click API
+  deadline?: string // ISO 8601 format deadline from quote
 ) {
   depositTracking.set(depositAddress, {
     intentId,
@@ -44,6 +51,8 @@ export function registerDeposit(
     chain,
     x402Executed: false,
     redirectUrl, // Store redirect URL
+    quoteData, // Store full quote data
+    deadline, // Store deadline
   })
   return { success: true, depositAddress }
 }
@@ -79,5 +88,36 @@ export function getDepositTrackingBySwapWallet(swapWalletAddress: string): Depos
     }
   }
   return undefined
+}
+
+/**
+ * Update deposit tracking with new fields
+ */
+export function updateDepositTracking(depositAddress: string, updates: Partial<DepositTracking>) {
+  const tracking = depositTracking.get(depositAddress)
+  if (tracking) {
+    depositTracking.set(depositAddress, { ...tracking, ...updates })
+  }
+  return tracking
+}
+
+/**
+ * Get all deposit addresses with deadline still remaining
+ * Returns deposits where deadline is in the future
+ */
+export function getDepositsWithDeadlineRemaining(): Array<[string, DepositTracking]> {
+  const now = Date.now()
+  return Array.from(depositTracking.entries()).filter(([_, tracking]) => {
+    if (!tracking.deadline) return false
+    const deadlineTime = new Date(tracking.deadline).getTime()
+    return deadlineTime > now && !tracking.confirmed
+  })
+}
+
+/**
+ * Get all deposits (for cronjob)
+ */
+export function getAllDeposits(): Array<[string, DepositTracking]> {
+  return Array.from(depositTracking.entries())
 }
 

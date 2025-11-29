@@ -1,10 +1,17 @@
 // 1-Click API integration based on https://github.com/near-examples/near-intents-examples
 // Using official SDK: @defuse-protocol/one-click-sdk-typescript
 
-import { OneClickService } from '@defuse-protocol/one-click-sdk-typescript'
+import { OneClickService, OpenAPI } from '@defuse-protocol/one-click-sdk-typescript'
 
 const ONE_CLICK_JWT = process.env.ONE_CLICK_JWT || ''
 const ONE_CLICK_API_URL =  process.env.ONE_CLICK_API_URL || 'https://1click.chaindefuser.com'
+
+// Initialize SDK with base URL and token (if available)
+// Based on: https://github.com/near-examples/near-intents-examples/blob/main/1click-example/4-submit-tx-hash-OPTIONAL.ts
+OpenAPI.BASE = ONE_CLICK_API_URL
+if (ONE_CLICK_JWT) {
+  OpenAPI.TOKEN = ONE_CLICK_JWT
+}
 // Get all available tokens across chains
 // The API returns tokens in format: { result: { tokens: [...] } } or { items: [...] }
 export async function getAvailableTokens() {
@@ -38,7 +45,7 @@ export async function getAvailableTokens() {
 // Quote request interface matching 1-Click API format
 export interface QuoteRequest {
   dry: boolean // Testing mode: true for quote estimation, false for actual execution
-  swapType: 'EXACT_INPUT' | 'EXACT_OUTPUT'
+  swapType: 'EXACT_INPUT' | 'EXACT_OUTPUT' | 'FLEX_INPUT'
   slippageTolerance: number // Basis points (100 = 1.00%)
   originAsset: string // Source token in NEP:contract format
   depositType: 'ORIGIN_CHAIN' | 'INTENTS'
@@ -51,9 +58,10 @@ export interface QuoteRequest {
   deadline: string // ISO format timestamp
   referral?: string
   quoteWaitingTimeMs?: number
+  sessionId?: string // Session identifier for tracking
 }
 
-// Get swap quote with deposit address (USDC → Zcash)
+// Get swap quote with deposit address (Zcash → USDC)
 export async function getSwapQuote(params: {
   senderAddress: string
   recipientAddress: string
@@ -61,16 +69,20 @@ export async function getSwapQuote(params: {
   destinationAsset: string
   amount: string
   dry?: boolean // false for actual execution
+  sessionId?: string // Optional session identifier
 }) {
   try {
+    // Generate sessionId if not provided
+    const sessionId = params.sessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    
     const quoteRequest: QuoteRequest = {
-      dry: params.dry ?? false, // false for actual execution
-      swapType: 'EXACT_OUTPUT', // We know the USDC output amount, need to know Zcash input amount
+      dry: params.dry ?? true, // true for quote estimation, false for actual execution
+      swapType: 'EXACT_OUTPUT', // Exact USDC output amount, calculate required Zcash input
       slippageTolerance: 100, // 1% slippage
       originAsset: params.originAsset,
       depositType: 'ORIGIN_CHAIN',
       destinationAsset: params.destinationAsset,
-      amount: params.amount, // This is the USDC amount we want (output)
+      amount: params.amount, // This is the Zcash input amount
       refundTo: process.env.REFUND_ZCASH_ADDRESS || params.senderAddress,
       refundType: 'ORIGIN_CHAIN',
       recipient: params.recipientAddress,
@@ -78,9 +90,13 @@ export async function getSwapQuote(params: {
       deadline: new Date(Date.now() + 3 * 60 * 1000).toISOString(), // 3 minutes from now
       referral: 'anyone-pay',
       quoteWaitingTimeMs: 3000,
+      sessionId: sessionId, // Session identifier for tracking
     }
     // Use the original QuoteRequest format - API expects originAsset, destinationAsset, etc.
-    // Log for debugging
+    // Verify sessionId is included
+    if (!quoteRequest.sessionId) {
+      console.warn('⚠️ sessionId is missing from quoteRequest!')
+    }
     console.log('Quote request:', JSON.stringify(quoteRequest, null, 2))
     
     const response = await fetch(`${ONE_CLICK_API_URL}/v0/quote`, {
@@ -98,13 +114,18 @@ export async function getSwapQuote(params: {
     }
 
     const data = await response.json()
-    console.log(data);
-    // The API response structure may vary - extract depositAddress from response
-    // It might be in data.depositAddress, data.quote.depositAddress, or data.address
+    
+    // Extract sessionId from response if available
+    const responseSessionId = data.sessionId || data.quote?.sessionId || data.session_id || data.quote?.session_id
+    if (responseSessionId) {
+      console.log('Quote response sessionId:', responseSessionId)
+    }
+    
     return {
       ...data,
       depositAddress: data.depositAddress || data.quote?.depositAddress || data.address,
       swapId: data.swapId || data.id || data.depositAddress,
+      sessionId: responseSessionId, // Include sessionId from response if available
     }
   } catch (error) {
     console.error('Error getting swap quote:', error)
@@ -127,18 +148,17 @@ export async function checkSwapStatus(depositAddress: string) {
 }
 
 // Submit transaction hash (optional, speeds up processing)
+// Based on: https://github.com/near-examples/near-intents-examples/blob/main/1click-example/4-submit-tx-hash-OPTIONAL.ts
 export async function submitTxHash(txHash: string, depositAddress: string) {
   try {
-    const response = await fetch(`${ONE_CLICK_API_URL}/v0/deposit-tx`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(ONE_CLICK_JWT ? { Authorization: `Bearer ${ONE_CLICK_JWT}` } : {}),
-      },
-      body: JSON.stringify({ txHash, depositAddress }),
+    // Use official SDK method
+   const a =  await OneClickService.submitDepositTx({
+      txHash,
+      depositAddress
     })
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
-    return await response.json()
+    console.log("a",a,txHash,depositAddress)
+    console.log(`✅ Transaction hash submitted: ${txHash} for deposit ${depositAddress}`)
+    return { success: true, txHash, depositAddress }
   } catch (error) {
     console.error('Error submitting tx hash:', error)
     throw error

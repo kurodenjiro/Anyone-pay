@@ -44,6 +44,7 @@ function HomeContent() {
     currency?: string
     aiMessage?: string
     quoteWaitingTimeMs?: number
+    deadline?: string // ISO 8601 format: "2025-11-30T19:12:39.942Z"
   } | null>(null)
   const [depositConfirmed, setDepositConfirmed] = useState(false)
   const [showCreateService, setShowCreateService] = useState(false)
@@ -55,37 +56,167 @@ function HomeContent() {
   const [timeEstimate, setTimeEstimate] = useState<number | null>(null) // Time estimate from swap status
   const [x402Status, setX402Status] = useState<string | null>(null) // x402 payment status
   const [redirectInfo, setRedirectInfo] = useState<{ url?: string; message?: string } | null>(null) // Redirect information
+  const [showTxHashInput, setShowTxHashInput] = useState(false) // Show input for Zcash transaction hash
+  const [txHash, setTxHash] = useState('') // User-entered transaction hash
+  const [submittingTxHash, setSubmittingTxHash] = useState(false) // Loading state for submitting tx hash
+  const [txHashSubmitResult, setTxHashSubmitResult] = useState<{ success: boolean; message: string } | null>(null) // Result of hash submission
+  const [depositAddressLoaded, setDepositAddressLoaded] = useState(false) // Track if deposit address was loaded from URL
 
   useEffect(() => {
-    // Check if service ID is in URL
+    // Check if deposit address is in URL
+    const depositAddrFromUrl = searchParams.get('depositAddr')
     const serviceId = searchParams.get('service')
     const promptFromUrl = searchParams.get('prompt')
     
-    if (serviceId && !intentData) {
-      // Load service from URL
+    // Check if we're in the middle of an active transaction
+    // Don't reload if we're polling, submitting hash, or have active transaction state
+    const hasActiveTransaction = pollingStatus !== null || 
+                                  showTxHashInput || 
+                                  submittingTxHash || 
+                                  countdown !== null ||
+                                  depositConfirmed
+    
+    // PRIORITY: If deposit address is in URL, load data from it (don't create new address)
+    if (depositAddrFromUrl && !intentData && !hasActiveTransaction && !isLoading && !depositAddressLoaded) {
+      // Load deposit data from URL parameter
+      setDepositAddressLoaded(true) // Prevent multiple calls
+      loadDepositFromAddress(depositAddrFromUrl)
+    } else if (serviceId && !intentData && !hasActiveTransaction && !depositAddrFromUrl) {
+      // Only load service if there's no depositAddr parameter
       loadServiceFromId(serviceId)
-    } else if (promptFromUrl && !intentData && !query) {
-      // Load prompt from URL - will be handled by handleSubmit when component is ready
+    } else if (promptFromUrl && !intentData && !query && !hasActiveTransaction && !depositAddrFromUrl) {
+      // Only load prompt if there's no depositAddr parameter
       setQuery(promptFromUrl)
       setShowInput(true)
-    } else if (!intentData && !promptFromUrl && !serviceId) {
+    } else if (!intentData && !promptFromUrl && !serviceId && !depositAddrFromUrl && !hasActiveTransaction) {
       // Auto-show input after a brief delay for first load (only if no intent data)
       const timer = setTimeout(() => {
         setShowInput(true)
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [searchParams, intentData, query])
+  }, [searchParams, intentData, query, pollingStatus, showTxHashInput, submittingTxHash, countdown, depositConfirmed, isLoading, depositAddressLoaded])
   
   // Handle prompt from URL after query is set
   useEffect(() => {
     const promptFromUrl = searchParams.get('prompt')
-    if (promptFromUrl && query === promptFromUrl && !intentData && !isLoading) {
+    const depositAddrFromUrl = searchParams.get('depositAddr')
+    // Don't auto-submit if depositAddr is in URL (prioritize loading existing deposit)
+    if (promptFromUrl && query === promptFromUrl && !intentData && !isLoading && !depositAddrFromUrl) {
       // Auto-submit the prompt from URL
       handleSubmit(promptFromUrl).catch(console.error)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, searchParams])
+
+  const loadDepositFromAddress = async (depositAddress: string) => {
+    try {
+      setIsLoading(true)
+      console.log('🔄 Loading deposit from address:', depositAddress)
+      
+      // Check deposit status
+      const response = await fetch('/api/relayer/check-deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: depositAddress }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to check deposit status')
+      }
+      
+      const data = await response.json()
+      
+      console.log('📦 Deposit status data:', {
+        status: data.status,
+        confirmed: data.confirmed,
+        hasSwapStatus: !!data.swapStatus,
+        hasIntentId: !!data.intentId,
+        swapStatus: data.swapStatus
+      })
+      
+      // Extract zcashAmount and deadline from swapStatus (always try to extract, even without tracking)
+      let zcashAmount: string | undefined = undefined
+      let deadline: string | undefined = undefined
+      let quoteWaitingTimeMs: number | undefined = undefined
+      
+      if (data.swapStatus) {
+        const swapStatus = data.swapStatus as any
+        const quoteFromStatus = swapStatus?.quoteResponse?.quote
+        
+        // Extract zcashAmount
+        if (quoteFromStatus?.amountInFormatted !== undefined && quoteFromStatus?.amountInFormatted !== null) {
+          const rawValue = quoteFromStatus.amountInFormatted
+          if (typeof rawValue === 'string') {
+            zcashAmount = rawValue
+          } else if (typeof rawValue === 'number') {
+            zcashAmount = rawValue.toString()
+          } else {
+            zcashAmount = String(rawValue)
+          }
+        }
+        
+        // Extract deadline
+        deadline = quoteFromStatus?.deadline || 
+                   swapStatus?.quoteResponse?.quote?.deadline ||
+                   null
+        
+        // Extract quoteWaitingTimeMs
+        quoteWaitingTimeMs = quoteFromStatus?.quoteWaitingTimeMs || 
+                            swapStatus?.quoteResponse?.quote?.quoteWaitingTimeMs ||
+                            undefined
+      }
+      
+      // Use amount from tracking if zcashAmount not available
+      const displayAmount = zcashAmount || data.amount || '0'
+      
+      // Set intent data with the EXISTING deposit address (don't create new one)
+      setIntentData({
+        type: data.intentType || 'payment',
+        depositAddress, // Use the existing deposit address from URL
+        amount: displayAmount,
+        redirectUrl: data.redirectUrl || '',
+        chain: data.chain || 'base',
+        needsBridge: true,
+        bridgeFrom: 'zcash',
+        bridgeTo: data.chain || 'base',
+        currency: 'USDC',
+        quoteWaitingTimeMs,
+        deadline,
+      })
+      
+      console.log('✅ Loaded existing deposit address:', depositAddress)
+      console.log('📊 Status:', data.status, 'Confirmed:', data.confirmed)
+      
+      // Always set polling status from the response
+      if (data.status) {
+        setPollingStatus(data.status)
+        console.log('🔄 Set polling status to:', data.status)
+      }
+      
+      // If not confirmed, start polling
+      if (!data.confirmed && data.status !== 'SUCCESS' && data.status !== 'REFUNDED' && data.status !== 'FAILED') {
+        // Show input box for tx hash
+        setShowTxHashInput(true)
+        
+        // Start polling to continue checking status
+        console.log('🔄 Starting polling for deposit address:', depositAddress)
+        pollDepositConfirmation(depositAddress)
+      } else if (data.confirmed || data.status === 'SUCCESS') {
+        // Already confirmed, set deposit confirmed
+        console.log('✅ Deposit already confirmed')
+        setDepositConfirmed(true)
+      } else {
+        // For other terminal states (REFUNDED, FAILED), just show the status
+        console.log('⚠️ Deposit in terminal state:', data.status)
+      }
+      
+      setIsLoading(false)
+    } catch (error) {
+      console.error('Error loading deposit from address:', error)
+      setIsLoading(false)
+    }
+  }
 
   const loadServiceFromId = async (serviceId: string) => {
     try {
@@ -100,7 +231,7 @@ function HomeContent() {
         throw new Error('Service missing receiving address')
       }
       
-      const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount } = await generateDepositAddress(
+      const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount, deadline } = await generateDepositAddress(
         'payment',
         amount,
         {
@@ -117,6 +248,18 @@ function HomeContent() {
         }
       )
       
+      // Update URL with deposit address parameter
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.set('depositAddr', depositAddress)
+      window.history.pushState({}, '', newUrl.toString())
+      
+      // Log what we're setting
+      console.log('📝 Setting intentData for service:')
+      console.log('  - zcashAmount:', zcashAmount)
+      console.log('  - amount (USDC):', amount)
+      console.log('  - Final amount to display:', zcashAmount || amount)
+      console.log('  - deadline:', deadline)
+      
       setIntentData({
         type: 'payment',
         depositAddress,
@@ -130,6 +273,7 @@ function HomeContent() {
         receivingAddress: fullService.receivingAddress,
         currency: fullService.currency,
         quoteWaitingTimeMs,
+        deadline,
       })
       // Start countdown after deposit address is created
       if (quoteWaitingTimeMs) {
@@ -229,11 +373,16 @@ function HomeContent() {
       if (isComplete) {
         // Full payment data available - generate QR code
         // Currency conversion message is informational only, doesn't block payment
-        const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount } = await generateDepositAddress(parsed.type, amount, parsed)
+        const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount, deadline } = await generateDepositAddress(parsed.type, amount, parsed)
         
         // Target API URL is now stored in database (depositTracking) via registerDeposit
         // No need to store in localStorage anymore
         const targetApiUrl = parsed.redirect_url || parsed.redirectUrl || ''
+        
+        // Update URL with deposit address parameter
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.set('depositAddr', depositAddress)
+        window.history.pushState({}, '', newUrl.toString())
         
         setIntentData({
           type: parsed.type,
@@ -247,6 +396,7 @@ function HomeContent() {
           receivingAddress: parsed.metadata?.receivingAddress,
           currency: normalizedCurrency || 'USDC',
           quoteWaitingTimeMs,
+          deadline,
           // Show currency conversion message if present (informational only)
           aiMessage: hasCurrencyConversion ? parsed.aiMessage : undefined,
         })
@@ -308,7 +458,7 @@ function HomeContent() {
     intentType: string, 
     amount: string,
     parsed: any
-  ): Promise<{ depositAddress: string; intentId: string; quoteWaitingTimeMs?: number; zcashAmount?: string }> => {
+  ): Promise<{ depositAddress: string; intentId: string; quoteWaitingTimeMs?: number; zcashAmount?: string; deadline?: string }> => {
     const timestamp = Date.now()
     const intentId = `intent-${timestamp}`
     
@@ -348,11 +498,18 @@ function HomeContent() {
         throw new Error('No deposit address returned from 1-Click API')
       }
       
+      // Log what we received from the API
+      console.log('📥 Received from register-deposit API:')
+      console.log('  - zcashAmount:', data.zcashAmount)
+      console.log('  - amount (USDC):', amount)
+      console.log('  - Full data:', data)
+      
       return { 
         depositAddress: data.depositAddress, 
         intentId,
         quoteWaitingTimeMs: data.quoteWaitingTimeMs,
-        zcashAmount: data.zcashAmount // Amount of Zcash user needs to deposit
+        zcashAmount: data.zcashAmount, // Amount of Zcash user needs to deposit (from amountInFormatted)
+        deadline: data.deadline // ISO 8601 format deadline from quote response
       }
     } catch (error) {
       console.error('Failed to register deposit:', error)
@@ -361,12 +518,19 @@ function HomeContent() {
   }
 
   const pollDepositConfirmation = async (address: string) => {
-    const maxAttempts = 60 // 5 minutes max (60 attempts * 5 seconds = 5 minutes)
+    // Calculate max attempts based on deadline (default 5 minutes if no deadline)
+    // Poll every 5 seconds, so maxAttempts = deadlineSeconds / 5
+    const defaultMaxAttempts = 60 // 5 minutes default (60 attempts * 5 seconds = 5 minutes)
+    let maxAttempts = defaultMaxAttempts
     let attempts = 0
+    let deadlineTimestamp: number | null = null
 
     console.log('🔄 Starting status polling...')
     setPollingStatus('PENDING')
     setPollingAttempt(0)
+    
+    // Show input box when polling starts (user can submit hash anytime)
+    setShowTxHashInput(true)
 
     const poll = async () => {
       try {
@@ -388,90 +552,70 @@ function HomeContent() {
         // Update polling status in UI
         setPollingStatus(status)
         
+        // Input box is already shown when polling starts
+        // Polling continues regardless of whether user submits hash or not
+        
         // Extract timeEstimate from swap status if available
         if (data.swapStatus?.quoteResponse?.quote?.timeEstimate) {
           const estimateSeconds = data.swapStatus.quoteResponse.quote.timeEstimate
           setTimeEstimate(estimateSeconds * 1000) // Convert to milliseconds
         }
         
+        // Extract deadline from quote if available (first time only)
+        if (!deadlineTimestamp && data.swapStatus?.quoteResponse?.quote?.deadline) {
+          deadlineTimestamp = new Date(data.swapStatus.quoteResponse.quote.deadline).getTime()
+          // Calculate max attempts based on deadline: (deadline - now) / 5 seconds per attempt
+          const timeUntilDeadline = deadlineTimestamp - Date.now()
+          if (timeUntilDeadline > 0) {
+            maxAttempts = Math.ceil(timeUntilDeadline / 5000) // 5 seconds per attempt
+            console.log(`📅 Using deadline-based polling: ${maxAttempts} attempts (${Math.ceil(timeUntilDeadline / 1000)}s until deadline)`)
+          }
+        }
+        
         console.log(`   Current status: ${status} (attempt ${attempts + 1}/${maxAttempts})`)
+        
+        // Check if deadline has passed
+        if (deadlineTimestamp && Date.now() > deadlineTimestamp) {
+          console.log('⏰ Deadline passed, stopping polling')
+          setPollingStatus('TIMEOUT')
+          return // Stop polling
+        }
         
         if (data.confirmed || status === 'SUCCESS') {
           console.log('🎉 Intent Fulfilled!')
           setPollingStatus('SUCCESS')
           
-          // Execute x402 payment after swap completes
-          // The swap wallet will sign and send payment to the original recipient address
-          try {
-            // Step 1: Sign x402 payment
-            setX402Status('Signing x402 payment...')
-            setRedirectInfo({ message: 'Preparing payment signature...' })
-            
-            const x402Response = await fetch('/api/relayer/execute-x402', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ depositAddress: address }),
+          // Check if signedPayload is already in DB (from cronjob)
+          // The cronjob handles x402 execution server-side, we just wait for signedPayload
+          if (data.signedPayload && data.redirectUrl) {
+            console.log('✅ Found signedPayload in DB, redirecting to content...')
+            setX402Status('x402 payment completed')
+            setRedirectInfo({ 
+              url: data.redirectUrl,
+              message: 'Redirecting to premium content...' 
             })
             
-            if (!x402Response.ok) {
-              console.error('x402 API error:', x402Response.status, x402Response.statusText)
-              const errorText = await x402Response.text()
-              console.error('Error response:', errorText)
-              setX402Status('x402 payment failed')
-              setRedirectInfo({ message: `Payment failed: ${x402Response.status}` })
-              throw new Error(`x402 payment failed: ${x402Response.status} ${x402Response.statusText}`)
-            }
+            // Build content URL with signedPayload
+            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
+            const contentUrl = new URL('/content', baseUrl)
+            contentUrl.searchParams.set('signedPayload', encodeURIComponent(data.signedPayload))
+            contentUrl.searchParams.set('address', data.swapWalletAddress || '')
             
-            const x402Data = await x402Response.json()
-            
-            // Step 2: Get redirect URL
-            setX402Status('x402 payment signed')
-            setRedirectInfo({ message: 'Getting redirect URL...' })
-            
-            if (x402Data.success && x402Data.redirectUrl) {
-              console.log('✅ x402 payment executed:', x402Data)
-              
-              // Step 3: Redirect information
-              setX402Status('x402 payment completed')
-              setRedirectInfo({ 
-                url: x402Data.redirectUrl,
-                message: 'Redirecting to premium content...' 
-              })
-              
-              // Redirect to content page with signed payload
-              setDepositConfirmed(true)
-              setTimeout(() => {
-                window.location.href = x402Data.redirectUrl
-              }, 2000)
-              return
-            } else if (x402Data.redirectUrl) {
-              // Redirect to refund page
-              console.log('⚠️ x402 payment failed, redirecting to refund:', x402Data.error)
-              setX402Status('x402 payment failed')
-              setRedirectInfo({ 
-                url: x402Data.redirectUrl,
-                message: 'Redirecting to refund page...' 
-              })
-              setDepositConfirmed(true)
-              setTimeout(() => {
-                window.location.href = x402Data.redirectUrl
-              }, 2000)
-              return
-            }
-          } catch (error) {
-            console.error('Error executing x402 payment:', error)
-            setX402Status('x402 payment error')
-            setRedirectInfo({ message: error instanceof Error ? error.message : 'Unknown error' })
+            setDepositConfirmed(true)
+            setTimeout(() => {
+              window.location.href = contentUrl.toString()
+            }, 2000)
+            return
           }
           
-          setDepositConfirmed(true)
-          // Fallback redirect
-          setTimeout(() => {
-            if (intentData?.redirectUrl) {
-              window.location.href = intentData.redirectUrl
-            }
-          }, 2000)
-          return // Stop polling
+          // If no signedPayload yet, wait for cronjob to execute x402
+          // Show waiting message
+          setX402Status('Waiting for payment processing...')
+          setRedirectInfo({ message: 'Payment is being processed. Please wait...' })
+          
+          // Continue polling to check for signedPayload
+          // Don't stop polling yet - wait for cronjob to process
+          console.log('⏳ Waiting for cronjob to execute x402 payment...')
         }
         
         // If status is REFUNDED, stop polling
@@ -481,13 +625,22 @@ function HomeContent() {
           return // Stop polling
         }
         
-        // Continue polling if not at max attempts
-        if (attempts < maxAttempts) {
+        // Continue polling for PENDING_DEPOSIT, PROCESSING, INCOMPLETE_DEPOSIT, etc.
+        // Polling continues regardless of whether user submits hash or not
+        // Only stops when: SUCCESS, REFUNDED, FAILED, deadline passed, or max attempts reached
+        
+        // Continue polling if not at max attempts and deadline hasn't passed
+        if (attempts < maxAttempts && (!deadlineTimestamp || Date.now() < deadlineTimestamp)) {
           attempts++
           setTimeout(poll, 5000) // Poll every 5 seconds
         } else {
-          console.log('⏸️ Max polling attempts reached')
-          setPollingStatus('TIMEOUT')
+          if (deadlineTimestamp && Date.now() >= deadlineTimestamp) {
+            console.log('⏰ Deadline reached, stopping polling')
+            setPollingStatus('TIMEOUT')
+          } else {
+            console.log('⏸️ Max polling attempts reached')
+            setPollingStatus('TIMEOUT')
+          }
         }
       } catch (error) {
         console.error('Error checking status:', error)
@@ -512,6 +665,61 @@ function HomeContent() {
     }
   }
   
+  const handleSubmitTxHash = async () => {
+    if (!txHash.trim() || !intentData?.depositAddress) {
+      return
+    }
+    
+    setSubmittingTxHash(true)
+    setTxHashSubmitResult(null) // Clear previous result
+    
+    try {
+      const response = await fetch('/api/relayer/submit-tx-hash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          txHash: txHash.trim(),
+          depositAddress: intentData.depositAddress
+        }),
+      })
+      
+      const data = await response.json()
+      
+      // Check submitResult
+      if (!response.ok) {
+        setTxHashSubmitResult({
+          success: false,
+          message: data.error || data.details || 'Failed to submit transaction hash'
+        })
+        console.error('❌ Transaction hash submission failed:', data)
+        return
+      }
+      
+      // Success
+      setTxHashSubmitResult({
+        success: true,
+        message: data.message || 'Transaction hash submitted successfully! This will speed up the swap process.'
+      })
+      console.log('✅ Transaction hash submitted:', data)
+      
+      // Clear input but keep input box visible (user might want to submit another hash)
+      setTxHash('')
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setTxHashSubmitResult(null)
+      }, 5000)
+    } catch (error) {
+      console.error('Error submitting transaction hash:', error)
+      setTxHashSubmitResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to submit transaction hash'
+      })
+    } finally {
+      setSubmittingTxHash(false)
+    }
+  }
+
   const handleNewQuery = () => {
     // Reset when user wants to start a new query
     setIntentData(null)
@@ -524,13 +732,20 @@ function HomeContent() {
     setTimeEstimate(null)
     setX402Status(null)
     setRedirectInfo(null)
+    setShowTxHashInput(false)
+    setTxHash('')
+    setSubmittingTxHash(false)
+    setTxHashSubmitResult(null)
+    setDepositAddressLoaded(false) // Reset deposit address loaded flag
     
     // Clear URL parameters and go to home
     const newUrl = new URL(window.location.href)
     newUrl.searchParams.delete('prompt')
     newUrl.searchParams.delete('service')
+    newUrl.searchParams.delete('depositAddr') // Also clear deposit address parameter
     window.history.pushState({}, '', newUrl.pathname)
   }
+
 
   return (
       <main 
@@ -610,11 +825,16 @@ function HomeContent() {
               transition={{ duration: 0.4 }}
               className="w-full"
             >
-              <IntentsQR 
-                depositAddress={intentData.depositAddress}
-                amount={intentData.amount}
-                quoteWaitingTimeMs={timeEstimate || intentData.quoteWaitingTimeMs}
-              />
+              <div className="relative">
+                <IntentsQR 
+                  depositAddress={intentData.depositAddress}
+                  amount={intentData.amount}
+                  deadline={intentData.deadline}
+                  quoteWaitingTimeMs={timeEstimate || intentData.quoteWaitingTimeMs}
+                  status={pollingStatus}
+                  pollingAttempt={pollingAttempt}
+                />
+              </div>
             </motion.div>
           )}
 
@@ -631,41 +851,6 @@ function HomeContent() {
                 <p className="text-sm text-white">
                   Preparing deposit address... <span className="text-purple-400 font-semibold">{countdown}s</span>
                 </p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Polling status */}
-          {pollingStatus && countdown === 0 && !depositConfirmed && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-4 shadow-xl shadow-purple-500/10"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                  <div>
-                    <p className="text-sm text-white">
-                      Checking deposit status... 
-                      <span className="text-purple-400 ml-2 font-semibold">
-                        {pollingStatus === 'PENDING' || pollingStatus === 'PENDING_DEPOSIT' ? 'Waiting for deposit' :
-                         pollingStatus === 'KNOWN_DEPOSIT_TX' ? 'Deposit detected' :
-                         pollingStatus === 'PROCESSING' ? 'Processing swap' :
-                         pollingStatus === 'SUCCESS' ? 'Success!' :
-                         pollingStatus === 'REFUNDED' ? 'Refunded' :
-                         pollingStatus === 'FAILED' ? 'Failed' :
-                         pollingStatus === 'ERROR' ? 'Error' :
-                         pollingStatus === 'TIMEOUT' ? 'Timeout' :
-                         pollingStatus === 'INCOMPLETE_DEPOSIT' ? 'Incomplete deposit' :
-                         'Checking...'}
-                      </span>
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Attempt {pollingAttempt}/60
-                    </p>
-                  </div>
-                </div>
               </div>
             </motion.div>
           )}
@@ -696,6 +881,87 @@ function HomeContent() {
                     )}
                   </div>
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Transaction Hash Input - Show when polling starts */}
+          {showTxHashInput && intentData && pollingStatus && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full bg-gray-800/40 backdrop-blur-xl border border-purple-500/50 rounded-2xl p-6 shadow-xl shadow-purple-500/20 mt-4"
+            >
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-white font-semibold mb-2">
+                    {pollingStatus === 'PROCESSING' ? '🎉 Deposit Detected!' : '💡 Speed Up Swap'}
+                  </h3>
+                  <p className="text-sm text-gray-400">
+                    {pollingStatus === 'PROCESSING' 
+                      ? 'Please enter your Zcash transaction hash to speed up the swap process.'
+                      : 'Optionally enter your Zcash transaction hash to speed up the swap process (optional).'
+                    }
+                  </p>
+                </div>
+                
+                {/* Show submit result if available */}
+                {txHashSubmitResult && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`p-3 rounded-lg ${
+                      txHashSubmitResult.success 
+                        ? 'bg-green-500/20 border border-green-500/50' 
+                        : 'bg-red-500/20 border border-red-500/50'
+                    }`}
+                  >
+                    <p className={`text-sm ${
+                      txHashSubmitResult.success ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {txHashSubmitResult.success ? '✅' : '❌'} {txHashSubmitResult.message}
+                    </p>
+                  </motion.div>
+                )}
+                
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={txHash}
+                    onChange={(e) => {
+                      setTxHash(e.target.value)
+                      // Clear result when user starts typing
+                      if (txHashSubmitResult) {
+                        setTxHashSubmitResult(null)
+                      }
+                    }}
+                    placeholder="Enter Zcash transaction hash..."
+                    className="flex-1 px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                    disabled={submittingTxHash}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && txHash.trim() && !submittingTxHash) {
+                        handleSubmitTxHash()
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleSubmitTxHash}
+                    disabled={!txHash.trim() || submittingTxHash}
+                    className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                  >
+                    {submittingTxHash ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Submitting...
+                      </div>
+                    ) : (
+                      'Submit'
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  You can find your transaction hash in your Zcash wallet or block explorer. This is optional - polling will continue automatically.
+                </p>
               </div>
             </motion.div>
           )}
@@ -747,4 +1013,3 @@ function HomeContent() {
       </main>
   )
 }
-

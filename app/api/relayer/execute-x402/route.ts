@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDepositTracking, markDepositConfirmed } from '@/lib/depositTracking'
+import { getDepositTracking, markDepositConfirmed, updateDepositTracking } from '@/lib/depositTracking'
 import { executeX402Payment } from '@/lib/wallet'
 
 /**
@@ -55,11 +55,13 @@ export async function POST(request: NextRequest) {
       )
 
       if (paymentResult.success) {
-        // Mark x402 as executed
-        const updatedTracking = getDepositTracking(depositAddress)
-        if (updatedTracking) {
-          updatedTracking.x402Executed = true
-        }
+        // Mark x402 as executed and save signedPayload to DB
+        updateDepositTracking(depositAddress, {
+          signedPayload: paymentResult.signedPayload,
+          x402Executed: true,
+          confirmed: true,
+          confirmedAt: Date.now()
+        })
 
         // Build redirect URL with signed payload
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
