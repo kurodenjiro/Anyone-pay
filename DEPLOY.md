@@ -34,15 +34,16 @@ The relayer is now part of the Next.js API routes and deploys automatically with
 
 **Vercel Cron Jobs:**
 - Automatically configured in `vercel.json`
-- Polls deposits every 5 seconds via `/api/relayer/poll-deposits`
+- Checks deposits and executes x402 payments every 5 seconds via `/api/relayer/cronjob-check-deposits`
 - No separate deployment needed!
 
 **API Endpoints:**
 - `POST /api/relayer/register-deposit` - Register deposit addresses
 - `POST /api/relayer/check-deposit` - Check deposit status
-- `GET /api/relayer/poll-deposits` - Poll for confirmations (called by cron)
-- `GET /api/relayer/access-token/[intentId]` - Generate access tokens
-- `GET /api/relayer/health` - Health check
+- `POST /api/relayer/submit-tx-hash` - Submit transaction hash to speed up swap
+- `POST /api/relayer/refund` - Handle refunds
+- `GET /api/relayer/cronjob-check-deposits` - Cronjob to check deposits and execute x402 payments
+- `GET /api/relayer/test-supabase` - Test Supabase connection (development only)
 
 ## Deploy Contract to NEAR
 

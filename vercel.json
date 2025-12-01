@@ -6,7 +6,7 @@
   "regions": ["iad1"],
   "crons": [
     {
-      "path": "/api/relayer/poll-deposits",
+      "path": "/api/relayer/cronjob-check-deposits",
       "schedule": "*/5 * * * * *"
     }
   ],

@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "cronjob": "node scripts/run-cronjob.js"
+    "cronjob": "node scripts/run-cronjob.js",
+    "test:x402": "node scripts/test-execute-x402.js"
   },
   "dependencies": {
     "next": "^15.0.0",

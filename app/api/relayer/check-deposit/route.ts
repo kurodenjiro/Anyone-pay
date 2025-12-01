@@ -102,24 +102,60 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { address } = body
+    const { address, signedData } = body
 
-    if (!address) {
+    if (!address && !signedData) {
       return NextResponse.json(
-        { error: 'Missing required field: address' },
+        { error: 'Missing required field: either address or signedData must be provided' },
         { status: 400 }
       )
     }
 
-    const tracking = await getDepositTracking(address)
+    let tracking: any = null
+    let depositAddress = address
+
+    // If signedData is provided, find the deposit by signedPayload
+    if (signedData && !address) {
+      const { getAllDeposits } = await import('@/lib/depositTracking')
+      const allDeposits = await getAllDeposits()
+      const matchingDeposit = allDeposits.find(
+        ([_, t]) => t.signedPayload === signedData
+      )
+
+      if (!matchingDeposit) {
+        return NextResponse.json(
+          { error: 'No deposit found with matching signedData' },
+          { status: 404 }
+        )
+      }
+
+      depositAddress = matchingDeposit[0]
+      tracking = matchingDeposit[1]
+    } else if (depositAddress) {
+      tracking = await getDepositTracking(depositAddress)
+    }
+
+    // If both address and signedData provided, verify they match
+    if (address && signedData && tracking) {
+      if (tracking.signedPayload !== signedData) {
+        return NextResponse.json({
+          confirmed: false,
+          verified: false,
+          error: 'signedData does not match the deposit address',
+          depositAddress: address,
+        }, { status: 400 })
+      }
+    }
     
     // Check status via 1-Click API (works even without tracking data)
-    const status = await checkDepositStatus(address, tracking)
+    // Use depositAddress (which could be from signedData lookup) or address
+    const statusAddress = depositAddress || address
+    const status = await checkDepositStatus(statusAddress, tracking)
     const confirmed = status.confirmed
 
     // Mark as confirmed if status check confirms it and we have tracking
-    if (tracking && status.confirmed && !tracking.confirmed) {
-      await markDepositConfirmed(address)
+    if (tracking && status.confirmed && !tracking.confirmed && statusAddress) {
+      await markDepositConfirmed(statusAddress)
     }
 
     // Use the statusResponse from checkDepositStatus instead of making a duplicate call
@@ -130,7 +166,7 @@ export async function POST(request: NextRequest) {
       confirmed,
       intentId: tracking?.intentId,
       status: status.status || 'PENDING_DEPOSIT',
-      depositAddress: address,
+      depositAddress: depositAddress || address,
       refunded: status.refunded || false,
       processing: status.processing || false,
       failed: status.failed || false,
@@ -143,6 +179,8 @@ export async function POST(request: NextRequest) {
       intentType: tracking?.intentType,
       signedPayload: tracking?.signedPayload, // Include signedPayload if available
       swapWalletAddress: tracking?.swapWalletAddress, // Include swap wallet address for content page
+      x402Executed: tracking?.x402Executed || false, // Include x402 execution status
+      verified: signedData ? (tracking?.signedPayload === signedData) : undefined, // Verification result if signedData provided
     })
   } catch (error) {
     console.error('Error checking deposit:', error)
