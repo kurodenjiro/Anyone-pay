@@ -11,9 +11,10 @@ interface IntentsQRProps {
   quoteWaitingTimeMs?: number // Fallback if deadline not available
   status?: string | null // Current deposit status
   pollingAttempt?: number // Current polling attempt number
+  serviceName?: string // Service name to display
 }
 
-export function IntentsQR({ depositAddress, amount, deadline, quoteWaitingTimeMs, status, pollingAttempt }: IntentsQRProps) {
+export function IntentsQR({ depositAddress, amount, deadline, quoteWaitingTimeMs, status, pollingAttempt, serviceName }: IntentsQRProps) {
   const [copied, setCopied] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
 
@@ -69,6 +70,21 @@ export function IntentsQR({ depositAddress, amount, deadline, quoteWaitingTimeMs
     await navigator.clipboard.writeText(depositAddress)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Format seconds to HH:MM:SS
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    } else if (minutes > 0) {
+      return `${minutes}:${String(secs).padStart(2, '0')}`
+    } else {
+      return `${secs}s`
+    }
   }
 
   // Get status display info
@@ -148,6 +164,11 @@ export function IntentsQR({ depositAddress, amount, deadline, quoteWaitingTimeMs
         <h2 className="text-xl font-semibold text-white mb-2">
           Deposit Zcash
         </h2>
+        {serviceName && (
+          <p className="text-sm text-purple-300 font-medium mb-2">
+            {serviceName}
+          </p>
+        )}
         <p className="text-sm text-gray-400">
           Deposit <span className="text-purple-400 font-medium">{amount} ZEC</span> to continue
         </p>
@@ -192,7 +213,7 @@ export function IntentsQR({ depositAddress, amount, deadline, quoteWaitingTimeMs
           {(deadline || quoteWaitingTimeMs) && countdown !== null && countdown > 0 && (
             <div className="text-center mt-2">
               <p className="text-xs text-purple-400">
-                Deposit: <span className="font-semibold">{countdown}s</span> remaining
+                Deposit: <span className="font-semibold">{formatTime(countdown)}</span> remaining
               </p>
             </div>
           )}

@@ -833,6 +833,7 @@ function HomeContent() {
                   quoteWaitingTimeMs={timeEstimate || intentData.quoteWaitingTimeMs}
                   status={pollingStatus}
                   pollingAttempt={pollingAttempt}
+                  serviceName={intentData.serviceName}
                 />
               </div>
             </motion.div>
