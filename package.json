@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@defuse-protocol/one-click-sdk-typescript": "0.1.14",
+    "@supabase/supabase-js": "^2.86.0",
     "@types/elliptic": "^6.4.18",
     "autoprefixer": "^10.4.16",
     "bech32": "^2.0.0",
@@ -31,6 +32,7 @@
     "near-api-js": "^0.44.2",
     "near-seed-phrase": "^0.2.1",
     "next": "^15.0.0",
+    "openai": "^6.9.1",
     "postcss": "^8.4.32",
     "qrcode.react": "^3.1.0",
     "react": "^18.3.1",

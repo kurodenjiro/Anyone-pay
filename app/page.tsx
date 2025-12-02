@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AmbientBackground } from '@/components/AmbientBackground'
@@ -92,6 +92,7 @@ function HomeContent() {
       }, 500)
       return () => clearTimeout(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, intentData, query, pollingStatus, showTxHashInput, submittingTxHash, countdown, depositConfirmed, isLoading, depositAddressLoaded])
   
   // Handle prompt from URL after query is set
@@ -180,6 +181,7 @@ function HomeContent() {
         currency: 'USDC',
         quoteWaitingTimeMs,
         deadline,
+        serviceName: data.serviceName, // Include service name if available
       })
       
       console.log('✅ Loaded existing deposit address:', depositAddress)
@@ -480,6 +482,7 @@ function HomeContent() {
           senderAddress: '', // Will be set from wallet if available
           chain: parsed.chain || parsed.metadata?.chain || 'base',
           redirectUrl: parsed.redirect_url || parsed.redirectUrl || '',
+          metadata: parsed.metadata, // Include metadata (contains serviceName, etc.)
         }),
       })
       
@@ -592,11 +595,11 @@ function HomeContent() {
               message: 'Redirecting to premium content...' 
             })
             
-            // Build content URL with signedPayload
+            // Build content URL with deposit address only
+            // signedPayload will be retrieved from database by the content page
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
             const contentUrl = new URL('/content', baseUrl)
-            contentUrl.searchParams.set('signedPayload', encodeURIComponent(data.signedPayload))
-            contentUrl.searchParams.set('address', data.swapWalletAddress || '')
+            contentUrl.searchParams.set('address', address) // Use deposit address to lookup signedPayload from database
             
             setDepositConfirmed(true)
             setTimeout(() => {
@@ -985,7 +988,7 @@ function HomeContent() {
             >
               <div>
                 <p>Click anywhere to start typing your request.</p>
-                <p className="text-sm mt-2">e.g., "Pay ticket move Kiki deliver series" or "Swap 2 Zcash to USDC"</p>
+                <p className="text-sm mt-2">e.g., &quot;Pay ticket move Kiki deliver series&quot; or &quot;Swap 2 Zcash to USDC&quot;</p>
               </div>
               <div className="pt-4 border-t border-gray-800">
                 <button

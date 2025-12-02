@@ -162,6 +162,18 @@ export async function POST(request: NextRequest) {
     // This ensures we get the swap status data that was already retrieved
     const swapStatusResponse = status.statusResponse || null
 
+    // Extract serviceName from quoteData metadata if available
+    let serviceName: string | undefined = undefined
+    if (tracking?.quoteData) {
+      const quoteData = typeof tracking.quoteData === 'string' 
+        ? JSON.parse(tracking.quoteData) 
+        : tracking.quoteData
+      serviceName = quoteData?.metadata?.serviceName || 
+                    quoteData?.serviceName ||
+                    quoteData?.quote?.metadata?.serviceName ||
+                    quoteData?.quoteResponse?.metadata?.serviceName
+    }
+
     return NextResponse.json({
       confirmed,
       intentId: tracking?.intentId,
@@ -181,6 +193,7 @@ export async function POST(request: NextRequest) {
       swapWalletAddress: tracking?.swapWalletAddress, // Include swap wallet address for content page
       x402Executed: tracking?.x402Executed || false, // Include x402 execution status
       verified: signedData ? (tracking?.signedPayload === signedData) : undefined, // Verification result if signedData provided
+      serviceName, // Include service name if available
     })
   } catch (error) {
     console.error('Error checking deposit:', error)

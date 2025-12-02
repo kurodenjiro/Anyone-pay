@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { registerDeposit } from '@/lib/depositTracking'
 import { getSwapQuote, ASSETS, getAvailableTokens, checkSwapStatus } from '@/lib/oneClick'
-import { generateChainSigWallet } from '@/lib/wallet'
+import { getEthereumAddressFromProxyAccount } from '@/lib/chainSig'
+
+const nearAccountId = process.env.NEAR_PROXY_ACCOUNT_ID || ''
 
 // Convert USDC amount to smallest unit (6 decimals for USDC)
 function usdcToSmallestUnit(amount: string): string {
@@ -12,7 +14,7 @@ function usdcToSmallestUnit(amount: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { intentId, intentType, amount, recipient, senderAddress, chain, redirectUrl, serviceId } = body
+    const { intentId, intentType, amount, recipient, senderAddress, chain, redirectUrl, serviceId, metadata } = body
 
     if (!intentId || !intentType || !amount) {
       return NextResponse.json(
@@ -42,9 +44,8 @@ export async function POST(request: NextRequest) {
     
     // Get NEAR proxy account and Ethereum address using Chain Signatures
     // This wallet will be used to receive swap and sign x402 payment
-    const swapWallet = await generateChainSigWallet()
-    console.log('Using NEAR proxy account:', swapWallet.nearAccountId)
-    console.log('Generated Ethereum address:', swapWallet.ethAddress)
+    const swapWallet = await getEthereumAddressFromProxyAccount()
+    console.log('Generated Ethereum address:', swapWallet)
     console.log('Original payment address (x402 recipient):', recipient)
 
     // Get quote for Zcash → USDC conversion using 1-Click API
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     try {
       const quote = await getSwapQuote({
         senderAddress: senderAddress || 'anyone-pay.near',
-        recipientAddress: swapWallet.ethAddress, // NEW Ethereum address receives the swap
+        recipientAddress: swapWallet, // NEW Ethereum address receives the swap
         originAsset: zcashAsset, // Zcash (user deposits this)
         destinationAsset: usdcAsset, // USDC on target chain (Base/Solana/NEAR)
         amount: usdcToSmallestUnit(amount), // Amount in smallest unit (for FLEX_INPUT)
@@ -95,6 +96,15 @@ export async function POST(request: NextRequest) {
                      quoteData?.quoteResponse?.deadline ||
                      null
 
+    // Add metadata (including serviceName) to quoteData if available
+    if (metadata && quoteData) {
+      if (!quoteData.metadata) {
+        quoteData.metadata = {}
+      }
+      // Merge metadata into quoteData
+      quoteData.metadata = { ...quoteData.metadata, ...metadata }
+    }
+
     // Register deposit tracking
     // Store both: original payment address (for x402) and new wallet (for swap recipient)
     const result = await registerDeposit(
@@ -104,11 +114,11 @@ export async function POST(request: NextRequest) {
       recipient, // Original payment address from AI (for x402)
       swapId,
       intentType,
-      swapWallet.ethAddress, // Ethereum address from NEAR account
-      swapWallet.nearAccountId, // NEAR account ID for Chain Signatures
+      swapWallet, // Ethereum address from NEAR account
+      nearAccountId, // NEAR account ID for Chain Signatures
       chain, // Target chain
       redirectUrl, // Original redirect URL
-      quoteData, // Store full quote data
+      quoteData, // Store full quote data (now includes metadata)
       deadline // Store deadline
     )
 

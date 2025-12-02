@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDepositsWithDeadlineRemaining, updateDepositTracking } from '@/lib/depositTracking'
 import { checkSwapStatus } from '@/lib/oneClick'
-import { executeX402Payment } from '@/lib/wallet'
+import { signX402TransactionWithChainSignature } from '@/lib/chainSig'
 
 /**
  * Cronjob endpoint to check deposit statuses and execute x402 payments
@@ -61,38 +61,72 @@ export async function GET(request: NextRequest) {
           }
 
           try {
-            // Execute x402 payment
-            const paymentResult = await executeX402Payment(
-              tracking.swapWalletAddress,
-              tracking.redirectUrl,
-              tracking.chain
-            )
-
-            if (paymentResult.success && paymentResult.signedPayload) {
-              // Save signedPayload to DB
-              await updateDepositTracking(depositAddress, {
-                signedPayload: paymentResult.signedPayload,
-                x402Executed: true,
-                confirmed: true,
-                confirmedAt: Date.now()
-              })
-
-              console.log(`  ✅ x402 payment executed and saved for ${depositAddress}`)
+            // Get quote from quoteData stored in tracking
+            if (!tracking.quoteData) {
+              console.log(`  ⚠️ No quoteData found for ${depositAddress}`)
               results.push({
                 depositAddress,
                 status: normalizedStatus,
-                action: 'x402_executed',
-                signedPayload: paymentResult.signedPayload
+                action: 'skipped',
+                reason: 'No quoteData found'
               })
-            } else {
-              console.log(`  ❌ x402 payment failed for ${depositAddress}:`, paymentResult.error)
-              results.push({
-                depositAddress,
-                status: normalizedStatus,
-                action: 'x402_failed',
-                error: paymentResult.error
-              })
+              continue
             }
+
+            const quoteData = typeof tracking.quoteData === 'string' 
+              ? JSON.parse(tracking.quoteData) 
+              : tracking.quoteData
+
+            // Extract quote fields - check multiple possible locations in the response
+            const quote = quoteData?.quote || quoteData?.quoteResponse || quoteData
+            
+            // Extract x402 payment fields from quote
+            // These should come from the redirectUrl's 402 response, not the swap quote
+            // For now, we'll use the recipient address as payTo
+            const payTo = quote?.payTo || tracking.recipient || quote?.recipient
+            const maxAmountRequired = quote?.maxAmountRequired || quote?.amount || tracking.amount
+            const deadline = quote?.deadline || (tracking.deadline ? Math.floor(new Date(tracking.deadline).getTime() / 1000) : undefined)
+            const nonce = quote?.nonce || quote?.nonceHex || `0x${Date.now().toString(16)}`
+
+            if (!payTo || !maxAmountRequired || !deadline || !nonce) {
+              console.log(`  ⚠️ Missing required x402 fields for ${depositAddress}:`, {
+                payTo: !!payTo,
+                maxAmountRequired: !!maxAmountRequired,
+                deadline: !!deadline,
+                nonce: !!nonce
+              })
+              results.push({
+                depositAddress,
+                status: normalizedStatus,
+                action: 'skipped',
+                reason: 'Missing required x402 fields in quote'
+              })
+              continue
+            }
+
+            // Execute x402 payment by signing and broadcasting the transaction
+            const transactionHash = await signX402TransactionWithChainSignature({
+              payTo,
+              maxAmountRequired: String(maxAmountRequired),
+              deadline: typeof deadline === 'string' ? Math.floor(new Date(deadline).getTime() / 1000) : Number(deadline),
+              nonce: String(nonce),
+            })
+
+            // Save transaction hash as signedPayload and mark as executed
+            await updateDepositTracking(depositAddress, {
+              signedPayload: transactionHash,
+              x402Executed: true,
+              confirmed: true,
+              confirmedAt: Date.now()
+            })
+
+            console.log(`  ✅ x402 payment executed and saved for ${depositAddress}`)
+            results.push({
+              depositAddress,
+              status: normalizedStatus,
+              action: 'x402_executed',
+              transactionHash: transactionHash
+            })
           } catch (error) {
             console.error(`  ❌ Error executing x402 payment for ${depositAddress}:`, error)
             results.push({

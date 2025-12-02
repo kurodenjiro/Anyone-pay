@@ -10,30 +10,35 @@ function ContentDisplay() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const signedPayload = searchParams.get('signedPayload')
-    const address = searchParams.get('address')
+    const address = searchParams.get('address') // Deposit address
 
-    if (!signedPayload || !address) {
-      setError('Missing signed payload or address')
+    if (!address) {
+      setError('Missing deposit address')
       setLoading(false)
       return
     }
 
-    // Fetch target API URL from database
+    // Fetch target API URL and get signedPayload from database
     const fetchContent = async () => {
       try {
-        // First, get the target API URL from database
+        // First, get the target API URL and signedPayload from database
         const urlResponse = await fetch(`/api/content/get-url?address=${encodeURIComponent(address)}`)
         
         if (!urlResponse.ok) {
           const errorData = await urlResponse.json()
-          setError(errorData.error || 'Failed to get target API URL from database')
+          if (urlResponse.status === 402) {
+            // Payment not yet executed
+            setError(errorData.message || 'Payment is still being processed. Please wait.')
+          } else {
+            setError(errorData.error || 'Failed to get payment information')
+          }
           setLoading(false)
           return
         }
 
         const urlData = await urlResponse.json()
         const targetApiUrl = urlData.redirectUrl
+        const signedPayload = urlData.signedPayload // Get signedPayload from database response
 
         if (!targetApiUrl) {
           setError('Target API URL not found in database')
@@ -41,11 +46,24 @@ function ContentDisplay() {
           return
         }
 
-        // Fetch content using x402 signed payload
+        if (!signedPayload) {
+          setError('Payment not yet executed. Please wait for payment processing.')
+          setLoading(false)
+          return
+        }
+
+        // Verify payment was executed
+        if (!urlData.verified || !urlData.x402Executed) {
+          setError('Payment verification failed. Please ensure the x402 payment has been executed.')
+          setLoading(false)
+          return
+        }
+
+        // Fetch content using x402 signed payload (transaction hash from database)
         const response = await fetch(targetApiUrl, {
           method: 'GET',
           headers: {
-            'X-PAYMENT': decodeURIComponent(signedPayload),
+            'X-PAYMENT': signedPayload, // Transaction hash from database
             'Content-Type': 'application/json',
           },
         })

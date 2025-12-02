@@ -66,7 +66,7 @@ async function testSignX402TransactionWithChainSignature() {
       payTo: process.env.TEST_X402_PAY_TO || '0x03fBbA1b1A455d028b074D9abC2b23d3EF786943',
       
       // Maximum amount required (in USDC, as string)
-      maxAmountRequired: process.env.TEST_X402_AMOUNT || '0.1', // 0.1 USDC
+      maxAmountRequired: '0.1', // 0.1 USDC
       
       // Deadline timestamp (Unix timestamp in seconds)
       deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
