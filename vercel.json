@@ -10,6 +10,8 @@
       "schedule": "*/60 * * * *"
     }
   ],
+
+  
   "env": {
     "NEXT_PUBLIC_NEAR_NETWORK": "mainnet",
     "NEXT_PUBLIC_CONTRACT_ID": "anyone-pay.near",
