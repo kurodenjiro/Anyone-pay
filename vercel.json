@@ -7,11 +7,9 @@
   "crons": [
     {
       "path": "/api/relayer/cronjob-check-deposits",
-      "schedule": "*/60 * * * *"
+      "schedule": "*/50 * * * *"
     }
   ],
-
-  
   "env": {
     "NEXT_PUBLIC_NEAR_NETWORK": "mainnet",
     "NEXT_PUBLIC_CONTRACT_ID": "anyone-pay.near",
