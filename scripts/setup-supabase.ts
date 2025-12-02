@@ -36,6 +36,9 @@ if (!supabaseServiceKey) {
   process.exit(1)
 }
 
+// TypeScript narrowing: after the check, we know supabaseServiceKey is defined
+const serviceKey: string = supabaseServiceKey
+
 // Create Supabase client with service role key for admin operations
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -78,8 +81,8 @@ async function runSQLSetup() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'apikey': supabaseServiceKey,
-            'Authorization': `Bearer ${supabaseServiceKey}`,
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
           },
           body: JSON.stringify({ sql: statement }),
         })
