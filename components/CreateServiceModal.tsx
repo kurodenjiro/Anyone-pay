@@ -27,6 +27,14 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
     e.preventDefault()
     setLoading(true)
 
+    // Validate payment amount (minimum 0.5)
+    const amount = parseFloat(formData.amount)
+    if (isNaN(amount) || amount < 0.5) {
+      alert('Payment amount must be at least 0.5 USDC')
+      setLoading(false)
+      return
+    }
+
     const keywords = formData.keywords.split(',').map(k => k.trim()).filter(k => k)
 
     try {
@@ -139,16 +147,21 @@ export function CreateServiceModal({ isOpen, onClose, onServiceCreated }: Create
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Payment Amount *
+                      Payment Amount * (min: 0.5)
                     </label>
                     <input
-                      type="text"
+                      type="number"
+                      min="0.5"
+                      step="0.1"
                       value={formData.amount}
                       onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="0.1"
+                      placeholder="0.5"
                       required
                     />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Minimum payment amount is 0.5 USDC
+                    </p>
                   </div>
 
                   <div>

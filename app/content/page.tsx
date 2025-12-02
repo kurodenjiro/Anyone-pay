@@ -8,6 +8,8 @@ function ContentDisplay() {
   const [content, setContent] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [serverDetails, setServerDetails] = useState<any>(null)
+  const [swapStatus, setSwapStatus] = useState<string>('UNKNOWN')
 
   useEffect(() => {
     const address = searchParams.get('address') // Deposit address
@@ -26,6 +28,45 @@ function ContentDisplay() {
         
         if (!urlResponse.ok) {
           const errorData = await urlResponse.json()
+          
+          // Check swap status using oneClick API even on error
+          let currentSwapStatus = 'UNKNOWN'
+          try {
+            const swapStatusResponse = await fetch(`/api/relayer/check-deposit`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ address }),
+            })
+            if (swapStatusResponse.ok) {
+              const swapData = await swapStatusResponse.json()
+              currentSwapStatus = swapData.swapStatus?.status || 
+                                swapData.swapStatus?.executionStatus ||
+                                swapData.swapStatus?.state ||
+                                swapData.status ||
+                                errorData.swapStatus ||
+                                'UNKNOWN'
+              currentSwapStatus = String(currentSwapStatus).toUpperCase()
+            } else {
+              currentSwapStatus = errorData.swapStatus || 'UNKNOWN'
+            }
+          } catch (err) {
+            console.warn('Error checking swap status:', err)
+            currentSwapStatus = errorData.swapStatus || 'UNKNOWN'
+          }
+
+          setSwapStatus(currentSwapStatus)
+          
+          // Store server details even on error
+          setServerDetails({
+            depositAddress: address,
+            signedPayload: errorData.signedPayload || null,
+            x402Executed: errorData.x402Executed || false,
+            swapStatus: currentSwapStatus,
+            verified: errorData.verified || false,
+            targetApiUrl: errorData.redirectUrl || null,
+            serviceName: errorData.serviceName || null,
+          })
+          
           if (urlResponse.status === 402) {
             // Payment not yet executed
             setError(errorData.message || 'Payment is still being processed. Please wait.')
@@ -39,6 +80,43 @@ function ContentDisplay() {
         const urlData = await urlResponse.json()
         const targetApiUrl = urlData.redirectUrl
         const signedPayload = urlData.signedPayload // Get signedPayload from database response
+
+        // Check swap status using oneClick API
+        let currentSwapStatus = 'UNKNOWN'
+        try {
+          const swapStatusResponse = await fetch(`/api/relayer/check-deposit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address }),
+          })
+          if (swapStatusResponse.ok) {
+            const swapData = await swapStatusResponse.json()
+            currentSwapStatus = swapData.swapStatus?.status || 
+                              swapData.swapStatus?.executionStatus ||
+                              swapData.swapStatus?.state ||
+                              swapData.status ||
+                              'UNKNOWN'
+            // Normalize to uppercase
+            currentSwapStatus = String(currentSwapStatus).toUpperCase()
+          }
+        } catch (err) {
+          console.warn('Error checking swap status:', err)
+          // Use status from urlData as fallback
+          currentSwapStatus = urlData.swapStatus || 'UNKNOWN'
+        }
+
+        setSwapStatus(currentSwapStatus)
+
+        // Store server details for display (always set, even if there are errors)
+        setServerDetails({
+          depositAddress: urlData.depositAddress || address,
+          signedPayload: signedPayload,
+          x402Executed: urlData.x402Executed || false,
+          swapStatus: currentSwapStatus,
+          verified: urlData.verified || false,
+          targetApiUrl: targetApiUrl,
+          serviceName: urlData.serviceName || null,
+        })
 
         if (!targetApiUrl) {
           setError('Target API URL not found in database')
@@ -102,18 +180,120 @@ function ContentDisplay() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-        <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-white mb-4">Error</h1>
-          <p className="text-red-400">{error}</p>
+      <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 p-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Show server details even on error */}
+          {serverDetails && (
+            <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6">
+              <h2 className="text-xl font-bold text-white mb-4">Server Details</h2>
+              <div className="space-y-3">
+                {serverDetails.serviceName && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Service Name</p>
+                    <p className="text-sm font-semibold text-white">{serverDetails.serviceName}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Deposit Address</p>
+                  <p className="font-mono text-sm text-purple-400 break-all">{serverDetails.depositAddress}</p>
+                </div>
+                {serverDetails.signedPayload && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Transaction Hash (signedPayload)</p>
+                    <p className="font-mono text-sm text-purple-400 break-all">{serverDetails.signedPayload}</p>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">x402 Executed</p>
+                    <p className={`text-sm font-semibold ${serverDetails.x402Executed ? 'text-green-400' : 'text-red-400'}`}>
+                      {serverDetails.x402Executed ? 'Yes' : 'No'}
+                    </p>
+                  </div>
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Swap Status</p>
+                  <p className={`text-sm font-semibold ${
+                    swapStatus === 'SUCCESS' ? 'text-green-400' : 
+                    swapStatus === 'PENDING' ? 'text-yellow-400' : 
+                    'text-red-400'
+                  }`}>
+                    {swapStatus}
+                  </p>
+                </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Payment Verified</p>
+                  <p className={`text-sm font-semibold ${serverDetails.verified ? 'text-green-400' : 'text-red-400'}`}>
+                    {serverDetails.verified ? 'Yes' : 'No'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 max-w-md w-full">
+            <h1 className="text-2xl font-bold text-white mb-4">Error</h1>
+            <p className="text-red-400">{error}</p>
+          </div>
         </div>
       </main>
     )
   }
 
+  const depositAddress = searchParams.get('address') || serverDetails?.depositAddress
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Server Details Section - Always show if we have any data */}
+        {(serverDetails || depositAddress) && (
+          <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6">
+            <h2 className="text-xl font-bold text-white mb-4">Server Details</h2>
+            <div className="space-y-3">
+              {serverDetails?.serviceName && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Service Name</p>
+                  <p className="text-sm font-semibold text-white">{serverDetails.serviceName}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Deposit Address</p>
+                <p className="font-mono text-sm text-purple-400 break-all">{serverDetails?.depositAddress || depositAddress || 'N/A'}</p>
+              </div>
+              {serverDetails?.signedPayload && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Transaction Hash (signedPayload)</p>
+                  <p className="font-mono text-sm text-purple-400 break-all">{serverDetails.signedPayload}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">x402 Executed</p>
+                  <p className={`text-sm font-semibold ${serverDetails?.x402Executed ? 'text-green-400' : 'text-red-400'}`}>
+                    {serverDetails?.x402Executed ? 'Yes' : 'No'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Swap Status</p>
+                  <p className={`text-sm font-semibold ${
+                    swapStatus === 'SUCCESS' ? 'text-green-400' : 
+                    swapStatus === 'PENDING' ? 'text-yellow-400' : 
+                    'text-gray-400'
+                  }`}>
+                    {swapStatus}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Payment Verified</p>
+                <p className={`text-sm font-semibold ${serverDetails?.verified ? 'text-green-400' : 'text-red-400'}`}>
+                  {serverDetails?.verified ? 'Yes' : 'No'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Content Section */}
         <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-8">
           {content && (
             <>

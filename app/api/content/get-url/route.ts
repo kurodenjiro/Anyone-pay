@@ -35,6 +35,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Extract serviceName from quoteData metadata if available (before any early returns)
+    let serviceName: string | undefined = undefined
+    if (tracking?.quoteData) {
+      const quoteData = typeof tracking.quoteData === 'string' 
+        ? JSON.parse(tracking.quoteData) 
+        : tracking.quoteData
+      serviceName = quoteData?.metadata?.serviceName || 
+                    quoteData?.serviceName ||
+                    quoteData?.quote?.metadata?.serviceName ||
+                    quoteData?.quoteResponse?.metadata?.serviceName
+    }
+
     // Check x402 payment status
     // Verify that the payment has been executed (signedPayload exists in database)
     if (!tracking.signedPayload) {
@@ -44,6 +56,7 @@ export async function GET(request: NextRequest) {
           message: 'Payment is still being processed. Please wait.',
           redirectUrl: tracking.redirectUrl,
           x402Executed: false,
+          serviceName, // Include service name even in error response
         },
         { status: 402 } // Payment Required
       )
@@ -74,6 +87,7 @@ export async function GET(request: NextRequest) {
           redirectUrl: tracking.redirectUrl,
           swapStatus: normalizedStatus,
           x402Executed: tracking.x402Executed || false,
+          serviceName, // Include service name even in error response
         },
         { status: 402 } // Payment Required
       )
@@ -87,6 +101,7 @@ export async function GET(request: NextRequest) {
       x402Executed: tracking.x402Executed || false,
       swapStatus: normalizedStatus,
       verified: true, // Payment is verified
+      serviceName, // Include service name if available
     })
   } catch (error) {
     console.error('Error getting redirect URL:', error)

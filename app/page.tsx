@@ -963,6 +963,41 @@ function HomeContent() {
                 <p className="text-xs text-gray-500">
                   You can find your transaction hash in your Zcash wallet or block explorer. This is optional - polling will continue automatically.
                 </p>
+                
+                {/* Content URL */}
+                {intentData?.depositAddress && (
+                  <div className="pt-4 border-t border-gray-700/50">
+                    <p className="text-xs text-gray-400 mb-2">Content URL:</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-xs text-purple-400 break-all font-mono">
+                        {typeof window !== 'undefined' 
+                          ? `${window.location.origin}/content?address=${intentData.depositAddress}`
+                          : `/content?address=${intentData.depositAddress}`
+                        }
+                      </code>
+                      <button
+                        onClick={(e) => {
+                          const url = typeof window !== 'undefined' 
+                            ? `${window.location.origin}/content?address=${intentData.depositAddress}`
+                            : `/content?address=${intentData.depositAddress}`
+                          navigator.clipboard.writeText(url)
+                          // Show brief feedback
+                          const btn = e.currentTarget as HTMLButtonElement
+                          if (btn) {
+                            const originalText = btn.textContent
+                            btn.textContent = 'Copied!'
+                            setTimeout(() => {
+                              if (btn) btn.textContent = originalText
+                            }, 2000)
+                          }
+                        }}
+                        className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
