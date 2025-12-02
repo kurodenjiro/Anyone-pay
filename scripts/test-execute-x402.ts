@@ -2,9 +2,9 @@
  * Test script for executeX402Payment function
  * 
  * Usage:
- *   npx tsx scripts/test-execute-x402.js
+ *   npm run test:x402
  *   OR
- *   node --loader ts-node/esm scripts/test-execute-x402.js
+ *   npx tsx scripts/test-execute-x402.ts
  * 
  * Make sure to set environment variables in .env.local:
  *   - NEAR_PROXY_ACCOUNT_ID
@@ -24,48 +24,13 @@ dotenv.config({ path: resolve(process.cwd(), '.env.local') })
 async function testExecuteX402Payment() {
   try {
     // Dynamic import for TypeScript module
-    const { signX402PaymentPayload } = await import('../lib/wallet')
-    const { getEthereumAddressFromProxyAccount } = await import('../lib/chainSig')
-    
-    console.log('🧪 Testing executeX402Payment function...')
-    console.log('')
-    
-    // Check environment variables first
-    if (!process.env.NEAR_PROXY_ACCOUNT_ID) {
-      console.error('❌ NEAR_PROXY_ACCOUNT_ID not set in environment')
-      console.error('   Set this in .env.local to test Chain Signatures')
-      process.exit(1)
-    }
-    
-    if (!process.env.NEAR_PROXY_PRIVATE_KEY) {
-      console.error('❌ NEAR_PROXY_PRIVATE_KEY not set in environment')
-      console.error('   Set this in .env.local to test Chain Signatures')
-      process.exit(1)
-    }
-    
-    console.log('✅ NEAR_PROXY_ACCOUNT_ID:', process.env.NEAR_PROXY_ACCOUNT_ID)
-    console.log('✅ NEAR_PROXY_PRIVATE_KEY: [HIDDEN]')
-    console.log('')
-    
-    // Get actual Ethereum address from NEAR account
-    console.log('🔍 Getting Ethereum address from NEAR proxy account...')
-    let ethAddress
-    try {
-      ethAddress = await getEthereumAddressFromProxyAccount()
-      console.log('✅ Ethereum Address:', ethAddress)
-    } catch (error) {
-      console.error('❌ Failed to get Ethereum address:', error.message)
-      console.error('   Using fallback address for testing...')
-      // Fallback for testing
-      ethAddress = '0x1234567890123456789012345678901234567890'
-    }
-    console.log('')
+    const { executeX402Payment } = await import('../lib/wallet')
     
     // Example data for testing
     const exampleData = {
       // Ethereum address derived from NEAR account (swap wallet address)
       // This is the address that will sign the payment
-      ethAddress: ethAddress,
+      ethAddress: '0x1234567890123456789012345678901234567890',
       
       // Target API URL that requires x402 payment
       // This should return a 402 status with a quote in the response body
@@ -76,16 +41,34 @@ async function testExecuteX402Payment() {
       //   "deadline": 1234567890,
       //   "nonce": "..."
       // }
-      targetApiUrl: process.env.TEST_X402_API_URL || 'https://example.com/api/premium-content',
+      targetApiUrl: 'https://example.com/api/premium-content',
       
       // Target chain (base, solana, near)
-      chain: process.env.TEST_X402_CHAIN || 'base'
+      chain: 'base'
     }
     
+    console.log('🧪 Testing executeX402Payment function...')
+    console.log('')
     console.log('Test Parameters:')
     console.log('  - ethAddress:', exampleData.ethAddress)
     console.log('  - targetApiUrl:', exampleData.targetApiUrl)
     console.log('  - chain:', exampleData.chain)
+    console.log('')
+    
+    // Check environment variables
+    if (!process.env.NEAR_PROXY_ACCOUNT_ID) {
+      console.warn('⚠️  NEAR_PROXY_ACCOUNT_ID not set in environment')
+      console.warn('   Set this in .env.local to test Chain Signatures')
+    } else {
+      console.log('✅ NEAR_PROXY_ACCOUNT_ID:', process.env.NEAR_PROXY_ACCOUNT_ID)
+    }
+    
+    if (!process.env.NEAR_PROXY_PRIVATE_KEY) {
+      console.warn('⚠️  NEAR_PROXY_PRIVATE_KEY not set in environment')
+      console.warn('   Set this in .env.local to test Chain Signatures')
+    } else {
+      console.log('✅ NEAR_PROXY_PRIVATE_KEY: [HIDDEN]')
+    }
     console.log('')
     
     // Execute the function
@@ -138,59 +121,31 @@ async function testExecuteX402Payment() {
 async function testSignX402PaymentPayload() {
   try {
     const { signX402PaymentPayload } = await import('../lib/wallet')
-    const { getEthereumAddressFromProxyAccount } = await import('../lib/chainSig')
     
     console.log('🧪 Testing signX402PaymentPayload with example quote...')
-    console.log('')
-    
-    // Check environment variables
-    if (!process.env.NEAR_PROXY_ACCOUNT_ID) {
-      console.error('❌ NEAR_PROXY_ACCOUNT_ID not set in environment')
-      console.error('   Set this in .env.local to test Chain Signatures')
-      process.exit(1)
-    }
-    
-    if (!process.env.NEAR_PROXY_PRIVATE_KEY) {
-      console.error('❌ NEAR_PROXY_PRIVATE_KEY not set in environment')
-      console.error('   Set this in .env.local to test Chain Signatures')
-      process.exit(1)
-    }
-    
-    // Get actual Ethereum address from NEAR account
-    console.log('🔍 Getting Ethereum address from NEAR proxy account...')
-    let ethAddress
-    try {
-      ethAddress = await getEthereumAddressFromProxyAccount()
-      console.log('✅ Ethereum Address:', ethAddress)
-    } catch (error) {
-      console.error('❌ Failed to get Ethereum address:', error.message)
-      console.error('   Using fallback address for testing...')
-      // Fallback for testing
-      ethAddress = '0x1234567890123456789012345678901234567890'
-    }
     console.log('')
     
     // Example quote data (what the target API would return in a 402 response)
     const exampleQuote = {
       // Address to pay to (recipient)
-      payTo: process.env.TEST_X402_PAY_TO || '0x03fBbA1b1A455d028b074D9abC2b23d3EF786943',
+      payTo: '0x9876543210987654321098765432109876543210',
       
       // Maximum amount required (in USDC, as string)
-      maxAmountRequired: process.env.TEST_X402_AMOUNT || '0.1', // $0.1 USDC
+      maxAmountRequired: '10.0', // 10 USDC
       
       // Deadline timestamp (Unix timestamp in seconds)
       deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
       
-      // Nonce (unique identifier for this payment) - should be a hex string or number
-      nonce: process.env.TEST_X402_NONCE || '0x' + '1234567890123456789012345678901234567890123456789012345678901234'.substring(0, 64)
+      // Nonce (unique identifier for this payment)
+      nonce: '1234567890123456789012345678901234567890123456789012345678901234'
     }
     
     const exampleData = {
       // Ethereum address that will sign (from address)
-      ethAddress: ethAddress,
+      ethAddress: '0x1234567890123456789012345678901234567890',
       
       // Chain to sign for
-      chain: process.env.TEST_X402_CHAIN || 'base'
+      chain: 'base'
     }
     
     console.log('Example Quote (what API returns in 402 response):')
@@ -257,8 +212,8 @@ async function main() {
     await testExecuteX402Payment()
   } else {
     console.log('Usage:')
-    console.log('  npx tsx scripts/test-execute-x402.js sign    - Test signing with mock quote (default)')
-    console.log('  npx tsx scripts/test-execute-x402.js execute - Test full execution (requires real API)')
+    console.log('  npm run test:x402 sign    - Test signing with mock quote (default)')
+    console.log('  npm run test:x402 execute - Test full execution (requires real API)')
     console.log('')
     console.log('Running sign test by default...')
     console.log('')

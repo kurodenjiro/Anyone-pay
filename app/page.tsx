@@ -6,22 +6,19 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { AmbientBackground } from '@/components/AmbientBackground'
 import { FloatingInput } from '@/components/FloatingInput'
 import { IntentsQR } from '@/components/IntentsQR'
-import { WalletProvider } from '@/components/WalletProvider'
 import { CreateServiceModal } from '@/components/CreateServiceModal'
 import { ServicesList } from '@/components/ServicesList'
 import { parseIntent } from '@/lib/intentParser'
 
 export default function Home() {
   return (
-    <WalletProvider>
-      <Suspense fallback={
-        <main className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-        </main>
-      }>
-        <HomeContent />
-      </Suspense>
-    </WalletProvider>
+    <Suspense fallback={
+      <main className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+      </main>
+    }>
+      <HomeContent />
+    </Suspense>
   )
 }
 

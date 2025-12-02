@@ -9,37 +9,45 @@
     "start": "next start",
     "lint": "next lint",
     "cronjob": "node scripts/run-cronjob.js",
-    "test:x402": "node scripts/test-execute-x402.js"
+    "test:x402": "tsx scripts/test-execute-x402.ts"
   },
   "dependencies": {
+    "@defuse-protocol/one-click-sdk-typescript": "0.1.14",
+    "@types/elliptic": "^6.4.18",
+    "autoprefixer": "^10.4.16",
+    "bech32": "^2.0.0",
+    "bn.js": "^5.2.2",
+    "bs58check": "^4.0.0",
+    "chainsig.js": "^1.1.14",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "dotenv": "^16.3.1",
+    "elliptic": "^6.6.1",
+    "ethers": "^5.7.2",
+    "framer-motion": "^11.0.0",
+    "js-sha3": "^0.9.3",
+    "keccak": "^3.0.4",
+    "lucide-react": "^0.344.0",
+    "near-api-js": "^0.44.2",
+    "near-seed-phrase": "^0.2.1",
     "next": "^15.0.0",
+    "postcss": "^8.4.32",
+    "qrcode.react": "^3.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@near-wallet-selector/core": "^9.0.0",
-    "@near-wallet-selector/modal-ui": "^9.0.0",
-    "@near-wallet-selector/modal-ui-js": "^9.0.0",
-    "@near-wallet-selector/near-wallet": "^9.0.0",
-    "@near-wallet-selector/sender": "^9.0.0",
-    "near-api-js": "^0.44.2",
-    "framer-motion": "^11.0.0",
-    "qrcode.react": "^3.1.0",
-    "tailwindcss": "^3.4.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "clsx": "^2.1.0",
-    "class-variance-authority": "^0.7.0",
-    "lucide-react": "^0.344.0",
     "react-hot-toast": "^2.4.1",
-    "@defuse-protocol/one-click-sdk-typescript": "^1.0.0",
-    "dotenv": "^16.3.1"
+    "tailwindcss": "^3.4.0",
+    "viem": "^2.0.0",
+    "xrpl": "^4.4.3"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
-    "typescript": "^5.3.3",
     "eslint": "^8.56.0",
-    "eslint-config-next": "^15.0.0"
-  }
+    "eslint-config-next": "^15.0.0",
+    "typescript": "^5.3.3"
+  },
+  "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
 }
-

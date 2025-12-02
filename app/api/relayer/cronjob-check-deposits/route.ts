@@ -63,7 +63,6 @@ export async function GET(request: NextRequest) {
           try {
             // Execute x402 payment
             const paymentResult = await executeX402Payment(
-              tracking.nearAccountId,
               tracking.swapWalletAddress,
               tracking.redirectUrl,
               tracking.chain

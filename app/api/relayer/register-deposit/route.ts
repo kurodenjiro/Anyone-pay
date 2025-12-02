@@ -225,9 +225,9 @@ export async function POST(request: NextRequest) {
     
     // Extract deadline again for response (already stored in tracking)
     const responseDeadline = quoteData?.quote?.deadline || 
-                             quoteData?.deadline || 
-                             quoteData?.quoteResponse?.deadline ||
-                             null
+                     quoteData?.deadline || 
+                     quoteData?.quoteResponse?.deadline ||
+                     null
 
     return NextResponse.json({
       ...result,

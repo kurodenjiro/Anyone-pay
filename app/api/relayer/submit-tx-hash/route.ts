@@ -31,10 +31,10 @@ export async function POST(request: NextRequest) {
 
     // Submit transaction hash to 1-Click API
     try {
-       await submitTxHash(txHash, depositAddress)
+      await submitTxHash(txHash, depositAddress)
       
       // Update tracking
-      updateDepositTracking(depositAddress, {
+      await updateDepositTracking(depositAddress, {
         txHashSubmitted: true,
         depositTxHash: txHash
       })

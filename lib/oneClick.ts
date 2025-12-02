@@ -1,17 +1,8 @@
 // 1-Click API integration based on https://github.com/near-examples/near-intents-examples
-// Using official SDK: @defuse-protocol/one-click-sdk-typescript
-
-import { OneClickService, OpenAPI } from '@defuse-protocol/one-click-sdk-typescript'
+// Using direct API calls instead of SDK
 
 const ONE_CLICK_JWT = process.env.ONE_CLICK_JWT || ''
-const ONE_CLICK_API_URL =  process.env.ONE_CLICK_API_URL || 'https://1click.chaindefuser.com'
-
-// Initialize SDK with base URL and token (if available)
-// Based on: https://github.com/near-examples/near-intents-examples/blob/main/1click-example/4-submit-tx-hash-OPTIONAL.ts
-OpenAPI.BASE = ONE_CLICK_API_URL
-if (ONE_CLICK_JWT) {
-  OpenAPI.TOKEN = ONE_CLICK_JWT
-}
+const ONE_CLICK_API_URL = process.env.ONE_CLICK_API_URL || 'https://1click.chaindefuser.com'
 // Get all available tokens across chains
 // The API returns tokens in format: { result: { tokens: [...] } } or { items: [...] }
 export async function getAvailableTokens() {
@@ -137,9 +128,22 @@ export async function getSwapQuote(params: {
 // Based on: https://github.com/near-examples/near-intents-examples/blob/main/1click-example/5-check-status-OPTIONAL.ts
 export async function checkSwapStatus(depositAddress: string) {
   try {
-    // Use official SDK method
-    const status = await OneClickService.getExecutionStatus(depositAddress)
-    console.log('Swap status from 1-Click SDK:', status, depositAddress)
+    // Use direct API call
+    const response = await fetch(`${ONE_CLICK_API_URL}/v0/execution-status/${depositAddress}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ONE_CLICK_JWT ? { Authorization: `Bearer ${ONE_CLICK_JWT}` } : {}),
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+    }
+
+    const status = await response.json()
+    console.log('Swap status from 1-Click API:', status, depositAddress)
     return status
   } catch (error) {
     console.error('Error checking swap status:', error)
@@ -151,14 +155,28 @@ export async function checkSwapStatus(depositAddress: string) {
 // Based on: https://github.com/near-examples/near-intents-examples/blob/main/1click-example/4-submit-tx-hash-OPTIONAL.ts
 export async function submitTxHash(txHash: string, depositAddress: string) {
   try {
-    // Use official SDK method
-   const a =  await OneClickService.submitDepositTx({
-      txHash,
-      depositAddress
+    // Use direct API call
+    const response = await fetch(`${ONE_CLICK_API_URL}/v0/submit-deposit-tx`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ONE_CLICK_JWT ? { Authorization: `Bearer ${ONE_CLICK_JWT}` } : {}),
+      },
+      body: JSON.stringify({
+        txHash,
+        depositAddress,
+      }),
     })
-    console.log("a",a,txHash,depositAddress)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP error! status: ${response.status}, ${errorText}`)
+    }
+
+    const result = await response.json()
+    console.log('Submit tx hash result:', result, txHash, depositAddress)
     console.log(`✅ Transaction hash submitted: ${txHash} for deposit ${depositAddress}`)
-    return { success: true, txHash, depositAddress }
+    return { success: true, txHash, depositAddress, ...result }
   } catch (error) {
     console.error('Error submitting tx hash:', error)
     throw error

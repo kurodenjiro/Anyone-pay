@@ -1,6 +1,6 @@
 // Utility for creating and managing Ethereum wallets for x402 payments using NEAR Chain Signatures
 import { ethers } from 'ethers'
-import { getEthereumAddressFromProxyAccount } from './chainSig'
+import { getEthereumAddressFromProxyAccount, prepareTransactionForSigning } from './chainSig'
 
 /**
  * Get NEAR proxy account and Ethereum address for Chain Signatures
@@ -43,16 +43,86 @@ const TOKEN_CONFIG: Record<string, { address: string; chainId: number }> = {
 }
 
 /**
+ * Prepare x402 payment transaction for signing
+ * Based on: https://github.com/near-examples/near-multichain/blob/main/src/components/EVM/EVM.jsx
+ * Pattern: Evm.prepareTransactionForSigning({ from, to, value })
+ * 
+ * Prepares a transaction to transfer USDC using transferWithAuthorization
+ * @param ethAddress - Ethereum address derived from NEAR account (sender)
+ * @param quote - x402 quote from the target API (contains payTo, maxAmountRequired, deadline, nonce)
+ * @param chain - Target chain (base, solana, etc.)
+ * @returns Object with transaction and hashesToSign ready for signing
+ */
+export async function prepareX402TransactionForSigning(
+  ethAddress: string,
+  quote: {
+    payTo: string
+    maxAmountRequired: string
+    deadline: number
+    nonce: string
+  },
+  chain: string
+): Promise<{ transaction: any; hashesToSign: string[] }> {
+  const config = TOKEN_CONFIG[chain]
+  
+  if (!config || !config.address) {
+    throw new Error(`Unsupported chain: ${chain}`)
+  }
+
+  // Convert amount to wei (USDC has 6 decimals)
+  const amountInWei = ethers.parseUnits(quote.maxAmountRequired, 6)
+
+  // Prepare transaction to call transferWithAuthorization on USDC contract
+  // The transaction will transfer USDC from ethAddress to quote.payTo
+  // Signature (v, r, s) will be added after signing with Chain Signatures
+  
+  // Encode function call: transferWithAuthorization(from, to, value, validAfter, validBefore, nonce, v, r, s)
+  const iface = new ethers.Interface([
+    'function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)'
+  ])
+  
+  // Convert nonce to bytes32
+  const nonceBytes = ethers.zeroPadValue(ethers.toBeHex(BigInt(quote.nonce)), 32)
+  
+  // Placeholder signature values (will be replaced after signing)
+  const placeholderV = 0
+  const placeholderR = ethers.ZeroHash
+  const placeholderS = ethers.ZeroHash
+  
+  // Encode the function call data
+  const data = iface.encodeFunctionData('transferWithAuthorization', [
+    ethAddress,        // from: sender address
+    quote.payTo,       // to: recipient address
+    amountInWei,       // value: amount in wei
+    0,                 // validAfter: can be used immediately
+    quote.deadline,    // validBefore: deadline timestamp
+    nonceBytes,        // nonce: unique identifier
+    placeholderV,     // v: signature component (will be replaced)
+    placeholderR,      // r: signature component (will be replaced)
+    placeholderS,      // s: signature component (will be replaced)
+  ])
+
+  // Use prepareTransactionForSigning to get transaction and hashes
+  // Pattern: Evm.prepareTransactionForSigning({ from, to, value, data })
+  const { transaction, hashesToSign } = await prepareTransactionForSigning({
+    from: ethAddress,
+    to: config.address, // USDC contract address
+    value: BigInt(0),    // No ETH value, this is a token transfer
+    data: data,          // Encoded function call data
+  })
+
+  return { transaction, hashesToSign }
+}
+
+/**
  * Sign x402 payment payload using EIP-3009 (TransferWithAuthorization) with Chain Signatures
  * Based on: https://github.com/near-examples/chainsig-script/blob/main/src/ethereum.ts
- * @param nearAccountId - NEAR account ID that will sign (generated from receipt address)
  * @param ethAddress - Ethereum address derived from NEAR account
  * @param quote - x402 quote from the target API (contains payTo, maxAmountRequired, deadline, nonce)
  * @param chain - Target chain (base, solana, etc.)
  * @returns Signed payload JSON string for X-PAYMENT header
  */
 export async function signX402PaymentPayload(
-  nearAccountId: string,
   ethAddress: string,
   quote: {
     payTo: string
@@ -111,14 +181,12 @@ export async function signX402PaymentPayload(
 
 /**
  * Execute x402 payment by getting quote, signing, and sending to target API
- * @param nearAccountId - NEAR account ID that will sign (generated from receipt address)
  * @param ethAddress - Ethereum address derived from NEAR account
  * @param targetApiUrl - Target API URL that requires x402 payment
  * @param chain - Target chain
  * @returns Payment result with signed payload and settlement info
  */
 export async function executeX402Payment(
-  nearAccountId: string,
   ethAddress: string,
   targetApiUrl: string,
   chain: string
@@ -144,7 +212,7 @@ export async function executeX402Payment(
     console.log('Received x402 quote:', quote)
 
     // Step 2: Sign the payment payload using Chain Signatures
-    const signedPayload = await signX402PaymentPayload(nearAccountId, ethAddress, quote, chain)
+    const signedPayload = await signX402PaymentPayload(ethAddress, quote, chain)
 
     // Step 3: Send signed payload back to target API
     const paymentResponse = await fetch(targetApiUrl, {
