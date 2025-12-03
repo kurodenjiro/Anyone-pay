@@ -15,7 +15,7 @@ import { KeyPairSigner } from '@near-js/signers'
 const BigNumber = ethers.BigNumber
 
 const NEAR_PROXY_CONTRACT = process.env.NEAR_PROXY_CONTRACT || 'false'
-const MPC_PATH = process.env.MPC_PATH || 'base-1'
+const MPC_PATH =  'base-1'
 const accountId = process.env.NEAR_PROXY_ACCOUNT_ID || ''
 const networkId = process.env.NEXT_PUBLIC_NEAR_NETWORK || 'mainnet'
 const contractId = process.env.NEAR_PROXY_CONTRACT_ID || 'v1.signer'
