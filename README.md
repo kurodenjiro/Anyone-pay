@@ -1,8 +1,8 @@
 # Anyone Pay
 
-**The ultimate real-world x402 + NEAR Intents app with Encrypted Data Drop**
+**Private cross-chain x402 payments for merchants. Powered by AI, NEAR Intents & Chain Signatures.**
 
-Built live for you by Grok – NEAR Intents Deposit Flow with AI-Powered Semantic Search
+A production-ready payment platform that enables private, cross-chain payments with AI-powered intent recognition and automatic payment execution.
 
 ## 🌐 Live URL
 
@@ -12,30 +12,17 @@ Built live for you by Grok – NEAR Intents Deposit Flow with AI-Powered Semanti
 
 ## 🚀 Features
 
-- **AI-Native UI**: Full-screen ambient gradient background with floating input that appears on click
-- **NEAR AI Cloud Integration**: Uses [NEAR AI Cloud](https://docs.near.ai/cloud/get-started/) to analyze prompts and determine intent flow
-- **AI-Powered Semantic Search**: Uses OpenAI embeddings + Supabase vector search to match user queries to services. Only returns matches above similarity threshold - if it doesn't match, it won't be found.
-- **Encrypted Data Drop**: No direct URLs stored - uses resource keys (Public Key A) with NEAR Intents
-- **X402 Payment Standard**: HTTP 402 payment required integration with automatic payment execution
-- **Supabase Storage**: All payment services stored in Supabase with vector embeddings for semantic search
-- **NEAR Intents Integration**: Generate QR codes for Zcash deposit addresses
-- **Intent Execution Flow**: Beautiful animated diagram showing:
-  1. NEAR AI analyzes intent
-  2. Create Zcash deposit address
-  3. Scan QR & deposit Zcash
-  4. Bridge Zcash to target chain (if needed)
-  5. Intent funding complete
-  6. Content unlock via Data Drop
-- **Real x402 Payments**: Integrated with Coinbase Facilitator for USDC payments
-- **Public Service Creation**: Anyone can create payment services without authentication
-- **Multiple Intent Types**:
-  - Payment intents with Encrypted Data Drop
-  - Weather forecasts (10-day premium data)
-  - AI image generation
-  - **Cross-chain token swaps** (Zcash ↔ USDC via 1-Click API & NEAR Intents)
-  - Purchase intents (milk tea example)
-- **Chain Detection**: Automatically detects which blockchain a domain/content is on
-- **Automatic Bridging**: Bridges Zcash to target chain when needed
+- **Privacy-First Payments**: Zcash shielded transactions (zk-SNARKs) hide amounts, sender, and recipient
+- **Cross-Chain Interoperability**: Automatic bridging from Zcash to Base/Solana via 1-Click API
+- **AI-Powered Intent Recognition**: Natural language processing to understand payment intents
+- **Semantic Service Matching**: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans)
+- **NEAR Chain Signatures**: MPC-based key management for cross-chain transaction signing
+- **x402 Payment Protocol**: HTTP 402 standard with automatic payment verification and execution
+- **One-Click Service Creation**: Merchants can create payment services without technical knowledge
+- **QR Code Payments**: Simple QR code scanning for Zcash deposits
+- **Automatic Payment Execution**: Server-side cronjobs handle payment verification and execution
+- **Real-Time Status Tracking**: Polling system tracks deposit and payment status
+- **URL-Based State Persistence**: Bookmarkable deposit links restore full payment state
 
 ## 🏗️ Architecture
 
@@ -59,28 +46,32 @@ Built live for you by Grok – NEAR Intents Deposit Flow with AI-Powered Semanti
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: Next.js 15, Tailwind CSS, Framer Motion, shadcn/ui, qrcode.react
-- **Blockchain**: NEAR Protocol, NEAR Intents SDK, x402 (Coinbase Facilitator)
-- **1-Click SDK**: [@defuse-protocol/one-click-sdk-typescript](https://github.com/near-examples/near-intents-examples) for cross-chain swaps
-- **Smart Contract**: Rust + NEAR SDK
-- **Relayer**: Next.js API Routes (integrated with 1-Click API)
-- **AI Agent**: Next.js API Routes with NEAR AI Cloud integration for prompt analysis
+- **Frontend**: Next.js 15, Tailwind CSS, Framer Motion, qrcode.react
+- **Blockchain**: 
+  - NEAR Protocol (Chain Signatures for MPC signing)
+  - Ethereum/Base (x402 payments via USDC)
+  - Zcash (private deposits)
+- **Cross-Chain**: 1-Click API for Zcash ↔ USDC swaps
+- **Chain Signatures**: NEAR MPC contract for Ethereum transaction signing
+- **AI**: OpenAI for embeddings, NEAR AI Cloud for intent analysis
 - **Database**: Supabase (PostgreSQL with pgvector for semantic search)
-- **Semantic Search**: OpenAI embeddings + Supabase vector similarity search
-- **Data Drop**: Encrypted Data Drop with resource keys (no direct URLs)
-- **Deployment**: Vercel (frontend + API + Cron Jobs), NEAR mainnet (contract), Supabase (database)
+- **Payment Protocol**: HTTP 402 (x402) standard
+- **Libraries**: 
+  - `ethers` v5.7.2 (Ethereum interactions)
+  - `chainsig.js` (EVM chain adapter)
+  - `near-api-js` (NEAR interactions)
+  - `viem` (Ethereum public client)
+- **Deployment**: Vercel (frontend + API + Cron Jobs), NEAR mainnet, Supabase
 
 ## 📦 Setup
 
 ### Prerequisites
 
 - Node.js 18+ and npm
-- NEAR AI Cloud API key ([Get one here](https://cloud.near.ai) - see [setup guide](https://docs.near.ai/cloud/get-started/#quick-setup))
-- OpenAI API key ([Get one here](https://platform.openai.com/api-keys)) - Required for semantic search embeddings
-- Supabase account ([Sign up here](https://supabase.com)) - Required for service storage
-- NEAR mainnet account (optional, for contract deployment)
-- Rust (for contract compilation, optional)
-- NEAR CLI (optional, for contract deployment)
+- **NEAR Account**: Mainnet account with Chain Signature access (for x402 payments)
+- **OpenAI API Key**: Required for semantic search embeddings ([Get one here](https://platform.openai.com/api-keys))
+- **Supabase Account**: Required for service storage and deposit tracking ([Sign up here](https://supabase.com))
+- **NEAR AI Cloud API Key**: Optional, for advanced intent analysis ([Get one here](https://cloud.near.ai))
 
 ### 1. Install Dependencies
 
@@ -93,19 +84,14 @@ cd contract
 cargo build --target wasm32-unknown-unknown --release
 ```
 
-### 2. NEAR Setup
+### 2. NEAR Chain Signatures Setup
 
-```bash
-# Install NEAR CLI
-npm install -g near-cli
+Anyone Pay uses NEAR Chain Signatures (MPC) for signing Ethereum transactions. You need:
 
-# Login to mainnet
-near login
+- A NEAR account with access to the Chain Signature MPC contract
+- The account's private key for signing MPC requests
 
-# Deploy contract
-cd contract
-near deploy --wasmFile target/wasm32-unknown-unknown/release/anyone_pay.wasm --accountId anyone-pay.near
-```
+The system uses the MPC contract to sign Ethereum transactions without exposing private keys.
 
 ### 3. Supabase Setup
 
@@ -125,32 +111,26 @@ See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for detailed instructions.
 Create `.env.local`:
 
 ```env
+# NEAR Configuration
 NEXT_PUBLIC_NEAR_NETWORK=mainnet
-NEXT_PUBLIC_CONTRACT_ID=anyone-pay.near
-NEXT_PUBLIC_INTENTS_CONTRACT=intents.near
-X402_FACILITATOR=x402.near
-
-# NEAR AI Cloud API Key (required for prompt analysis)
-# Get your API key from https://cloud.near.ai
-# See https://docs.near.ai/cloud/get-started/#quick-setup for setup instructions
-NEAR_AI_API_KEY=your-near-ai-api-key-here
+NEAR_PROXY_ACCOUNT_ID=your-near-account.near
+NEAR_PROXY_CONTRACT_ID=v1.signer
+NEAR_PROXY_PRIVATE_KEY=ed25519:your-private-key-here
 
 # OpenAI API Key (required for semantic search embeddings)
-# Get your API key from https://platform.openai.com/api-keys
-# This is used to generate embeddings for semantic search in Supabase
 OPENAI_API_KEY=sk-your-openai-api-key-here
 
-# Supabase Configuration (required for service storage and semantic search)
-# Get these from your Supabase project: Settings > API
+# Supabase Configuration (required for service storage and deposit tracking)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 
-# Note: Data Drop functionality has been removed - services now use direct URLs
-
-# Optional: 1-Click API JWT (without JWT incurs 0.1% fee on swaps)
-# Request JWT here: https://1click.fi
-ONE_CLICK_JWT=your_jwt_token_here
+# 1-Click API (for cross-chain swaps)
 ONE_CLICK_API_URL=https://api.1click.fi
+ONE_CLICK_JWT=your_jwt_token_here  # Optional: reduces swap fees
+
+# NEAR AI Cloud (optional, for advanced intent analysis)
+NEAR_AI_API_KEY=your-near-ai-api-key-here
 ```
 
 ### 5. Run Locally
@@ -164,25 +144,32 @@ Visit http://localhost:3000
 ## 📚 Documentation
 
 - [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) - Supabase setup guide
-- [DATA_DROP_INTEGRATION.md](./DATA_DROP_INTEGRATION.md) - Encrypted Data Drop integration details
+- [SUPABASE_ENV_VARS.md](./SUPABASE_ENV_VARS.md) - Supabase environment variables
 - [DEPLOY_CONTRACT.md](./DEPLOY_CONTRACT.md) - Contract deployment guide
 
 ## 🔐 Security
 
-- **No Direct URLs**: Services use resource keys (Public Key A) instead of direct URLs
-- **Encrypted Private Keys**: Private Key A should be encrypted before storing (TODO)
-- **X402 Payment Verification**: Payment verified before data retrieval
-- **Semantic Search Threshold**: Only returns matches above similarity threshold (default: 0.7)
+- **Private Payments**: Zcash shielded transactions hide all transaction details
+- **MPC Key Management**: NEAR Chain Signatures use Multi-Party Computation - no single point of key failure
+- **x402 Payment Verification**: Server-side verification ensures payment before content delivery
+- **Semantic Search Threshold**: Only returns matches above similarity threshold (default: 0.6)
+- **No KYC Required**: Small transactions don't require identity verification
 
 ## 🎯 Usage
 
-1. **Create a Service**: Click "Or create a new payment service" on homepage
-2. **Search for Service**: Type a query like "Pay ticket move Kiki deliver series"
-3. **AI Semantic Search**: System finds matching service using embeddings
-4. **Generate Intent**: Creates NEAR Intent with resource key
-5. **X402 Payment**: If payment required, Intent Solver handles it
-6. **Data Retrieval**: Solver executes `claim_data()` using Private Key A
-7. **Access Content**: Decrypted data returned to user
+### For Merchants
+
+1. **Create a Service**: Click "Create a new payment service" on homepage
+2. **Enter Details**: Service name, amount, currency, receiving address, and redirect URL
+3. **Share Link**: Customers can find your service via natural language search
+
+### For Customers
+
+1. **Search**: Type what you want to pay for (e.g., "Pay onlyfan")
+2. **AI Matching**: System finds matching service using semantic search
+3. **Scan QR Code**: Deposit Zcash to the generated address
+4. **Automatic Processing**: System bridges Zcash to USDC and executes x402 payment
+5. **Access Content**: Redirected to premium content after payment verification
 
 ## 🤝 Contributing
 
