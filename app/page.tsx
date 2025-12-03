@@ -837,13 +837,16 @@ function HomeContent() {
         <AmbientBackground />
         
         {/* Branding */}
-        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 text-center">
           <button
             onClick={handleNewQuery}
-            className="text-4xl md:text-5xl font-bold gradient-text hover:opacity-80 transition-opacity cursor-pointer"
+            className="text-4xl md:text-5xl font-bold gradient-text hover:opacity-80 transition-opacity cursor-pointer block"
           >
             Anyone Pay Legend
           </button>
+          <p className="text-xs md:text-sm text-gray-400 mt-2 font-light">
+            Private cross-chain x402 payments for merchants. Powered by AI, NEAR Intents & Chain Signatures
+          </p>
         </div>
         
         {/* All components in one page flow - centered and shortened */}
