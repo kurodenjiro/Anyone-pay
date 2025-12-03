@@ -51,6 +51,7 @@ function HomeContent() {
   const [pollingAttempt, setPollingAttempt] = useState(0) // Current polling attempt number
   const [countdown, setCountdown] = useState<number | null>(null) // Countdown after deposit address creation
   const [timeEstimate, setTimeEstimate] = useState<number | null>(null) // Time estimate from swap status
+  const [swapStatus, setSwapStatus] = useState<string | null>(null) // Current swap status from oneClick API
   const [x402Status, setX402Status] = useState<string | null>(null) // x402 payment status
   const [redirectInfo, setRedirectInfo] = useState<{ url?: string; message?: string } | null>(null) // Redirect information
   const [showTxHashInput, setShowTxHashInput] = useState(false) // Show input for Zcash transaction hash
@@ -193,6 +194,19 @@ function HomeContent() {
         console.log('🔄 Set polling status to:', data.status)
       }
       
+      // Extract and set swap status
+      if (data.swapStatus) {
+        const swapStatusData = data.swapStatus as any
+        const currentSwapStatus = swapStatusData?.status || 
+                                 swapStatusData?.executionStatus ||
+                                 swapStatusData?.state ||
+                                 data.status ||
+                                 'PENDING_DEPOSIT'
+        setSwapStatus(String(currentSwapStatus).toUpperCase())
+      } else {
+        setSwapStatus(data.status ? String(data.status).toUpperCase() : 'PENDING_DEPOSIT')
+      }
+      
       // If not confirmed, start polling
       if (!data.confirmed && data.status !== 'SUCCESS' && data.status !== 'REFUNDED' && data.status !== 'FAILED') {
         // Show input box for tx hash
@@ -246,6 +260,9 @@ function HomeContent() {
           }
         }
       )
+      
+      // Initialize swap status to PENDING_DEPOSIT when generating new deposit
+      setSwapStatus('PENDING_DEPOSIT')
       
       // Update URL with deposit address parameter
       const newUrl = new URL(window.location.href)
@@ -373,6 +390,9 @@ function HomeContent() {
         // Full payment data available - generate QR code
         // Currency conversion message is informational only, doesn't block payment
         const { depositAddress, intentId, quoteWaitingTimeMs, zcashAmount, deadline } = await generateDepositAddress(parsed.type, amount, parsed)
+        
+        // Initialize swap status to PENDING_DEPOSIT when generating new deposit
+        setSwapStatus('PENDING_DEPOSIT')
         
         // Target API URL is now stored in database (depositTracking) via registerDeposit
         // No need to store in localStorage anymore
@@ -518,9 +538,9 @@ function HomeContent() {
   }
 
   const pollDepositConfirmation = async (address: string) => {
-    // Calculate max attempts based on deadline (default 5 minutes if no deadline)
+    // Calculate max attempts based on deadline (default 30 minutes if no deadline)
     // Poll every 5 seconds, so maxAttempts = deadlineSeconds / 5
-    const defaultMaxAttempts = 60 // 5 minutes default (60 attempts * 5 seconds = 5 minutes)
+    const defaultMaxAttempts = 360 // 30 minutes default (360 attempts * 5 seconds = 30 minutes)
     let maxAttempts = defaultMaxAttempts
     let attempts = 0
     let deadlineTimestamp: number | null = null
@@ -551,12 +571,15 @@ function HomeContent() {
         
         // Extract swapStatus from response
         const swapStatusResponse = data.swapStatus
-        const swapStatus = swapStatusResponse?.status || 
+        const currentSwapStatus = swapStatusResponse?.status || 
                           swapStatusResponse?.executionStatus ||
                           swapStatusResponse?.state ||
                           status
         
-        const normalizedSwapStatus = String(swapStatus).toUpperCase()
+        const normalizedSwapStatus = String(currentSwapStatus).toUpperCase()
+        
+        // Update swap status state
+        setSwapStatus(normalizedSwapStatus)
         
         // Update polling status in UI
         setPollingStatus(status)
@@ -654,7 +677,7 @@ function HomeContent() {
     setRedirectInfo({ message: 'Payment is being processed. Please wait...' })
     
     let attempts = 0
-    const maxAttempts = 60 // Poll for up to 5 minutes (60 attempts * 5 seconds)
+    const maxAttempts = 360 // Poll for up to 5 minutes (60 attempts * 5 seconds)
     
     const poll = async () => {
       try {
@@ -777,7 +800,7 @@ function HomeContent() {
   }
 
   const handleNewQuery = () => {
-    // Reset when user wants to start a new query
+        // Reset when user wants to start a new query
     setIntentData(null)
     setDepositConfirmed(false)
     setQuery('')
@@ -793,6 +816,7 @@ function HomeContent() {
     setSubmittingTxHash(false)
     setTxHashSubmitResult(null)
     setDepositAddressLoaded(false) // Reset deposit address loaded flag
+    setSwapStatus(null) // Reset swap status
     
     // Clear URL parameters and go to home
     const newUrl = new URL(window.location.href)
@@ -873,8 +897,8 @@ function HomeContent() {
             </motion.div>
           )}
 
-          {/* QR Code - second component (only show when payment data is complete) */}
-          {intentData && intentData.depositAddress && !intentData.aiMessage && (
+          {/* QR Code - only show when swap status is PENDING_DEPOSIT */}
+          {intentData && intentData.depositAddress && !intentData.aiMessage && swapStatus === 'PENDING_DEPOSIT' && (
             <motion.div
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -891,6 +915,28 @@ function HomeContent() {
                   pollingAttempt={pollingAttempt}
                   serviceName={intentData.serviceName}
                 />
+              </div>
+            </motion.div>
+          )}
+
+          {/* Success message when deposit is detected (PROCESSING) */}
+          {intentData && intentData.depositAddress && !intentData.aiMessage && swapStatus === 'PROCESSING' && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="w-full bg-green-500/20 backdrop-blur-xl border border-green-500/50 rounded-2xl p-6 shadow-xl shadow-green-500/10"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <span className="text-green-400 text-2xl">✅</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-green-400 font-semibold text-lg mb-1">Deposit Detected!</h3>
+                  <p className="text-gray-300 text-sm">
+                    Your deposit has been received and is being processed. The swap is in progress...
+                  </p>
+                </div>
               </div>
             </motion.div>
           )}
