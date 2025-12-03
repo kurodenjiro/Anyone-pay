@@ -1006,12 +1006,20 @@ function HomeContent() {
                       </p>
                     )}
                     {x402Status === 'x402 payment completed' && intentData?.depositAddress && (
-                      <p className="text-xs text-purple-400 mt-1 font-mono truncate max-w-md">
+                      <a
+                        href={typeof window !== 'undefined' 
+                          ? `${window.location.origin}/content?address=${intentData.depositAddress}`
+                          : `/content?address=${intentData.depositAddress}`
+                        }
+                        className="text-xs text-purple-400 mt-1 font-mono truncate max-w-md hover:text-purple-300 hover:underline transition-colors block"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
                         {typeof window !== 'undefined' 
                           ? `${window.location.origin}/content?address=${intentData.depositAddress}`
                           : `/content?address=${intentData.depositAddress}`
                         }
-                      </p>
+                      </a>
                     )}
                   </div>
                 </div>
