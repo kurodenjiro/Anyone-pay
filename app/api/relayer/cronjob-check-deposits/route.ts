@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
             // For now, we'll use the recipient address as payTo
             const payTo = quote?.payTo || tracking.recipient || quote?.recipient
             const maxAmountRequired = quote?.maxAmountRequired || quote?.amount || tracking.amount
-            const deadline = quote?.deadline || (tracking.deadline ? Math.floor(new Date(tracking.deadline).getTime() / 1000) : undefined)
+            const deadline = Math.floor(Date.now() / 1000) + 3600
             const nonce = `0x${Date.now().toString(16)}`
 
             if (!payTo || !maxAmountRequired || !deadline || !nonce) {
