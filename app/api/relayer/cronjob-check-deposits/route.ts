@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
             const payTo = quote?.payTo || tracking.recipient || quote?.recipient
             const maxAmountRequired = quote?.maxAmountRequired || quote?.amount || tracking.amount
             const deadline = quote?.deadline || (tracking.deadline ? Math.floor(new Date(tracking.deadline).getTime() / 1000) : undefined)
-            const nonce = quote?.nonce || quote?.nonceHex || `0x${Date.now().toString(16)}`
+            const nonce = `0x${Date.now().toString(16)}`
 
             if (!payTo || !maxAmountRequired || !deadline || !nonce) {
               console.log(`  ⚠️ Missing required x402 fields for ${depositAddress}:`, {
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
               deadline: Math.floor(Date.now() / 1000) + 3600,
               nonce: String(nonce),
             })
-            
+
             // Save transaction hash as signedPayload and mark as executed
             await updateDepositTracking(depositAddress, {
               signedPayload: transactionHash,
