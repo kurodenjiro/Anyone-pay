@@ -227,13 +227,22 @@ function ContentDisplay() {
                     {serverDetails.verified ? 'Yes' : 'No'}
                   </p>
                 </div>
+                {serverDetails.verified && serverDetails.targetApiUrl && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Redirect URL</p>
+                    <p className="font-mono text-sm text-blue-400 break-all">{serverDetails.targetApiUrl}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
-          <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 max-w-md w-full">
-            <h1 className="text-2xl font-bold text-white mb-4">Error</h1>
-            <p className="text-red-400">{error}</p>
-          </div>
+          {error ? 
+          ''
+         :  <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 max-w-md w-full">
+         <h1 className="text-2xl font-bold text-white mb-4">Error</h1>
+         <p className="text-red-400">{error}</p>
+       </div>}
+         
         </div>
       </main>
     )
@@ -289,6 +298,12 @@ function ContentDisplay() {
                   {serverDetails?.verified ? 'Yes' : 'No'}
                 </p>
               </div>
+              {serverDetails?.verified && serverDetails?.targetApiUrl && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Redirect URL</p>
+                  <p className="font-mono text-sm text-blue-400 break-all">{serverDetails.targetApiUrl}</p>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -203,6 +203,16 @@ function HomeContent() {
                                  data.status ||
                                  'PENDING_DEPOSIT'
         setSwapStatus(String(currentSwapStatus).toUpperCase())
+      // Also check for x402 payment completion if signedPayload exists in database
+      if (data.signedPayload) {
+        console.log('✅ Found signedPayload in DB while loading intent data, x402 payment completed')
+        setX402Status('x402 payment completed')
+        setRedirectInfo({ 
+          url: data.redirectUrl,
+          message: 'Payment completed successfully'
+        })
+        setDepositConfirmed(true)
+      }
       } else {
         setSwapStatus(data.status ? String(data.status).toUpperCase() : 'PENDING_DEPOSIT')
       }
@@ -695,25 +705,17 @@ function HomeContent() {
         }
         
         const data = await response.json()
-        
+        console.log(data);
         // Check if signedPayload exists in database
-        if (data.signedPayload && data.redirectUrl) {
-          console.log('✅ Found signedPayload in DB, redirecting to content...')
+        if (data.signedPayload) {
+          console.log('✅ Found signedPayload in DB, x402 payment completed')
           setX402Status('x402 payment completed')
           setRedirectInfo({ 
             url: data.redirectUrl,
-            message: 'Redirecting to premium content...' 
+            message: 'Payment completed successfully' 
           })
           
-          // Build content URL with deposit address only
-          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
-          const contentUrl = new URL('/content', baseUrl)
-          contentUrl.searchParams.set('address', depositAddress)
-          
           setDepositConfirmed(true)
-          setTimeout(() => {
-            window.location.href = contentUrl.toString()
-          }, 2000)
           return // Stop polling
         }
         
@@ -941,6 +943,28 @@ function HomeContent() {
             </motion.div>
           )}
 
+          {/* Success message when swap is completed (SUCCESS) */}
+          {intentData && intentData.depositAddress && !intentData.aiMessage && swapStatus === 'SUCCESS' && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="w-full bg-green-500/20 backdrop-blur-xl border border-green-500/50 rounded-2xl p-6 shadow-xl shadow-green-500/10"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <span className="text-green-400 text-2xl">🎉</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-green-400 font-semibold text-lg mb-1">Swap Successful!</h3>
+                  <p className="text-gray-300 text-sm">
+                    Your swap has been completed successfully. {x402Status ? `` : 'Waiting for x402 payment execution...'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
 
           {/* Countdown after deposit address creation */}
           {countdown !== null && countdown > 0 && (
@@ -967,7 +991,11 @@ function HomeContent() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  {x402Status === 'x402 payment completed' ? (
+                    <span className="text-green-400 text-xl">✅</span>
+                  ) : (
+                    <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  )}
                   <div>
                     <p className="text-sm text-white">
                       {x402Status}
@@ -977,9 +1005,12 @@ function HomeContent() {
                         {redirectInfo.message}
                       </p>
                     )}
-                    {redirectInfo?.url && (
+                    {x402Status === 'x402 payment completed' && intentData?.depositAddress && (
                       <p className="text-xs text-purple-400 mt-1 font-mono truncate max-w-md">
-                        {redirectInfo.url}
+                        {typeof window !== 'undefined' 
+                          ? `${window.location.origin}/content?address=${intentData.depositAddress}`
+                          : `/content?address=${intentData.depositAddress}`
+                        }
                       </p>
                     )}
                   </div>
@@ -1105,14 +1136,18 @@ function HomeContent() {
           )}
 
           {/* Status message */}
-          {depositConfirmed && !x402Status && (
+          {depositConfirmed && x402Status && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="text-green-400 text-sm flex items-center gap-2"
             >
-              <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
-              Redirecting to premium content...
+              {x402Status === 'x402 payment completed' ? (
+                <span className="text-green-400">✅</span>
+              ) : (
+                <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+              )}
+              {x402Status}
             </motion.div>
           )}
 
