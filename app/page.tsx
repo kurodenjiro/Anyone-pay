@@ -837,14 +837,14 @@ function HomeContent() {
         <AmbientBackground />
         
         {/* Branding */}
-        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 text-center">
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 text-center px-4">
           <button
             onClick={handleNewQuery}
-            className="text-4xl md:text-5xl font-bold gradient-text hover:opacity-80 transition-opacity cursor-pointer block"
+            className="text-4xl md:text-6xl font-bold gradient-text hover:opacity-90 transition-opacity cursor-pointer block tracking-tight"
           >
             Anyone Pay Legend
           </button>
-          <p className="text-xs md:text-sm text-gray-400 mt-2 font-light">
+          <p className="text-sm md:text-base text-gray-300 mt-3 font-normal leading-relaxed max-w-2xl mx-auto">
             Private cross-chain x402 payments for merchants. Powered by AI, NEAR Intents & Chain Signatures
           </p>
         </div>
