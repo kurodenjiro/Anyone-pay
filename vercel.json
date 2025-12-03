@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/relayer/cronjob-check-deposits",
-      "schedule": "*/50 * * * *"
+      "schedule": "*/1 * * * *"
     }
   ],
   "env": {
