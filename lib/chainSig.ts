@@ -91,7 +91,7 @@ export async function deriveAddressAndPublicKey(
     throw new Error('NEAR account ID not configured. Set NEAR_PROXY_ACCOUNT_ID in .env')
   }
 
-  const path = derivationPath || MPC_PATH || 'base-1'
+  const path = 'base-1'
   
   // Use chainsig.js EVM adapter to derive address
   const result = await evmChain.deriveAddressAndPublicKey(accountId, path)
@@ -344,8 +344,6 @@ export async function signX402TransactionWithChainSignature(
   // Get gas price
   const gasPrice = await getGasPrice()
   
-  // Get transaction count for nonce
-  const provider = getBaseProvider()
   //const nonce = await provider.getTransactionCount(address)
 
   // Manually construct transaction since gas estimation fails with placeholder signatures
