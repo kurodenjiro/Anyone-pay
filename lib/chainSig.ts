@@ -40,7 +40,7 @@ const account = new Account(accountId, provider, signer)
 
 
 // Create public client for Base network
-const baseRpcUrl = process.env.BASE_RPC_URL || 'https://mainnet.base.org'
+const baseRpcUrl = 'https://mainnet.base.org'
 const publicClient: PublicClient = createPublicClient({
   chain: base,
   transport: http(baseRpcUrl),
@@ -58,7 +58,7 @@ const evmChain = new chainAdapters.evm.EVM({
  */
 const getBaseProvider = () => {
   return new ethers.providers.JsonRpcProvider(
-    process.env.BASE_RPC_URL || 'https://mainnet.base.org'
+    'https://mainnet.base.org'
   )
 }
 
@@ -68,9 +68,7 @@ const getBaseProvider = () => {
  */
 async function getGasPrice(): Promise<ethers.BigNumber> {
   try {
-    const provider = getBaseProvider()
-    const gasPrice = await provider.getGasPrice()
-    return gasPrice
+    return ethers.utils.parseUnits('0.1', 'gwei')
   } catch (error) {
     console.warn('Failed to fetch gas price from Base RPC, using fallback:', error)
     // Fallback to a reasonable gas price for Base (0.1 gwei)
@@ -348,13 +346,13 @@ export async function signX402TransactionWithChainSignature(
   
   // Get transaction count for nonce
   const provider = getBaseProvider()
-  const nonce = await provider.getTransactionCount(address)
+  //const nonce = await provider.getTransactionCount(address)
 
   // Manually construct transaction since gas estimation fails with placeholder signatures
   // We'll use a reasonable gas limit for USDC transferWithAuthorization calls
   const gasLimit = BigNumber.from(150000) // Typical gas for transferWithAuthorization
 
-
+  console.log('Encoding transferWithAuthorization with signatureEncoding transferWithAuthorization with signatureEncoding transferWithAuthorization with signature')
   // Use chainsig.js prepareTransactionForSigningLegacy for legacy transactions
   // This ensures the transaction format matches what finalizeTransactionSigningLegacy expects
   const { transaction: preparedTx, hashesToSign } = await evmChain.prepareTransactionForSigningLegacy({

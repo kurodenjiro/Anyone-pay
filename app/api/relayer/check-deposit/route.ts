@@ -20,7 +20,7 @@ async function checkDepositStatus(depositAddress: string, tracking?: any) {
     const statusResponse = await checkSwapStatus(depositAddress)
     
     // Log full status response for debugging
-    console.log('📦 Full status response:', JSON.stringify(statusResponse, null, 2))
+    //console.log('📦 Full status response:', JSON.stringify(statusResponse, null, 2))
     
     // Extract status from SDK response
     // The SDK response structure may vary - check multiple possible locations

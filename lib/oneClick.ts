@@ -139,7 +139,7 @@ export async function checkSwapStatus(depositAddress: string) {
   try {
     // Use official SDK method
     const status = await OneClickService.getExecutionStatus(depositAddress)
-    console.log('Swap status from 1-Click SDK:', status, depositAddress)
+    //console.log('Swap status from 1-Click SDK:', status, depositAddress)
     return status
   } catch (error) {
     console.error('Error checking swap status:', error)

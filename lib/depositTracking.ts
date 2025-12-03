@@ -371,7 +371,6 @@ export async function getDepositsWithDeadlineRemaining(): Promise<Array<[string,
       const { data, error } = await supabaseServer
         .from('deposit_tracking')
         .select('*')
-        .eq('confirmed', false)
         .not('deadline', 'is', null)
         .gt('deadline', now)
 

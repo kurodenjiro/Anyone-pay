@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDepositsWithDeadlineRemaining, updateDepositTracking } from '@/lib/depositTracking'
 import { checkSwapStatus } from '@/lib/oneClick'
-import { signX402TransactionWithChainSignature } from '@/lib/chainSig'
 
 /**
  * Cronjob endpoint to check deposit statuses and execute x402 payments
@@ -103,15 +102,35 @@ export async function GET(request: NextRequest) {
               })
               continue
             }
-
+            // const exampleQuote = {
+            //   // Address to pay to (recipient)
+            //   payTo: process.env.TEST_X402_PAY_TO || '0x03fBbA1b1A455d028b074D9abC2b23d3EF786943',
+              
+            //   // Maximum amount required (in USDC, as string)
+            //   maxAmountRequired: '0.1', // 0.1 USDC
+              
+            //   // Deadline timestamp (Unix timestamp in seconds)
+            //   deadline: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
+              
+            //   // Nonce (unique identifier for this payment) - should be a hex string or number
+            //   nonce: process.env.TEST_X402_NONCE || Date.now().toString(),
+            // }
             // Execute x402 payment by signing and broadcasting the transaction
+            console.log({
+              payTo,
+              maxAmountRequired: String(maxAmountRequired),
+              deadline: Math.floor(Date.now() / 1000) + 3600,
+              nonce: String(nonce),
+            })
+            const { signX402TransactionWithChainSignature } = await import('@/lib/chainSig')
+
             const transactionHash = await signX402TransactionWithChainSignature({
               payTo,
               maxAmountRequired: String(maxAmountRequired),
-              deadline: typeof deadline === 'string' ? Math.floor(new Date(deadline).getTime() / 1000) : Number(deadline),
+              deadline: Math.floor(Date.now() / 1000) + 3600,
               nonce: String(nonce),
             })
-
+            
             // Save transaction hash as signedPayload and mark as executed
             await updateDepositTracking(depositAddress, {
               signedPayload: transactionHash,

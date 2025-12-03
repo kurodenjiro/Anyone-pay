@@ -6,6 +6,10 @@
  * Usage:
  *   node scripts/run-cronjob.js
  */
+import dotenv from 'dotenv'
+import { resolve } from 'path'
+
+dotenv.config({ path: resolve(process.cwd(), '.env') })
 
 const API_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 const CRONJOB_ENDPOINT = `${API_URL}/api/relayer/cronjob-check-deposits`

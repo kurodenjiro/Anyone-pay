@@ -12,13 +12,13 @@ import { parseIntent } from '@/lib/intentParser'
 
 export default function Home() {
   return (
-    <Suspense fallback={
-      <main className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-      </main>
-    }>
-      <HomeContent />
-    </Suspense>
+      <Suspense fallback={
+        <main className="relative min-h-screen w-full bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+        </main>
+      }>
+        <HomeContent />
+      </Suspense>
   )
 }
 
@@ -289,7 +289,7 @@ function HomeContent() {
             }
             return prev - 1
           })
-        }, 1000)
+        }, 2000)
       } else {
         // Start polling immediately if no countdown
         pollDepositConfirmation(depositAddress)
@@ -549,6 +549,15 @@ function HomeContent() {
         const data = await response.json()
         const status = data.status || 'PENDING'
         
+        // Extract swapStatus from response
+        const swapStatusResponse = data.swapStatus
+        const swapStatus = swapStatusResponse?.status || 
+                          swapStatusResponse?.executionStatus ||
+                          swapStatusResponse?.state ||
+                          status
+        
+        const normalizedSwapStatus = String(swapStatus).toUpperCase()
+        
         // Update polling status in UI
         setPollingStatus(status)
         
@@ -572,7 +581,23 @@ function HomeContent() {
           }
         }
         
-        console.log(`   Current status: ${status} (attempt ${attempts + 1}/${maxAttempts})`)
+        console.log(`   Current status: ${status}, Swap status: ${normalizedSwapStatus} (attempt ${attempts + 1}/${maxAttempts})`)
+        
+        // Stop polling if swap status is SUCCESS, REFUNDED, or INCOMPLETE_DEPOSIT
+        if (normalizedSwapStatus === 'SUCCESS' || 
+            normalizedSwapStatus === 'REFUNDED' || 
+            normalizedSwapStatus === 'INCOMPLETE_DEPOSIT') {
+          console.log(`🛑 Stopping deposit polling. Swap status: ${normalizedSwapStatus}`)
+          setPollingStatus(normalizedSwapStatus)
+          
+          // If SUCCESS, start polling for x402 payment
+          if (normalizedSwapStatus === 'SUCCESS') {
+            console.log('✅ Swap successful! Starting x402 payment polling...')
+            pollX402Payment(address)
+          }
+          
+          return // Stop deposit polling
+        }
         
         // Check if deadline has passed
         if (deadlineTimestamp && Date.now() > deadlineTimestamp) {
@@ -581,45 +606,8 @@ function HomeContent() {
           return // Stop polling
         }
         
-        if (data.confirmed || status === 'SUCCESS') {
-          console.log('🎉 Intent Fulfilled!')
-          setPollingStatus('SUCCESS')
-          
-          // Check if signedPayload is already in DB (from cronjob)
-          // The cronjob handles x402 execution server-side, we just wait for signedPayload
-          if (data.signedPayload && data.redirectUrl) {
-            console.log('✅ Found signedPayload in DB, redirecting to content...')
-            setX402Status('x402 payment completed')
-            setRedirectInfo({ 
-              url: data.redirectUrl,
-              message: 'Redirecting to premium content...' 
-            })
-            
-            // Build content URL with deposit address only
-            // signedPayload will be retrieved from database by the content page
-            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
-            const contentUrl = new URL('/content', baseUrl)
-            contentUrl.searchParams.set('address', address) // Use deposit address to lookup signedPayload from database
-            
-            setDepositConfirmed(true)
-            setTimeout(() => {
-              window.location.href = contentUrl.toString()
-            }, 2000)
-            return
-          }
-          
-          // If no signedPayload yet, wait for cronjob to execute x402
-          // Show waiting message
-          setX402Status('Waiting for payment processing...')
-          setRedirectInfo({ message: 'Payment is being processed. Please wait...' })
-          
-          // Continue polling to check for signedPayload
-          // Don't stop polling yet - wait for cronjob to process
-          console.log('⏳ Waiting for cronjob to execute x402 payment...')
-        }
-        
-        // If status is REFUNDED, stop polling
-        if (status === 'REFUNDED' || status === 'FAILED') {
+        // If status is FAILED, stop polling
+        if (status === 'FAILED' || normalizedSwapStatus === 'FAILED') {
           console.log(`❌ Swap failed with status: ${status}`)
           setPollingStatus(status)
           return // Stop polling
@@ -652,6 +640,74 @@ function HomeContent() {
         } else {
           console.log('⏸️ Max polling attempts reached after error')
           setPollingStatus('TIMEOUT')
+        }
+      }
+    }
+
+    poll()
+  }
+
+  // Poll for x402 payment completion (check signedPayload in Supabase)
+  const pollX402Payment = async (depositAddress: string) => {
+    console.log('🔄 Starting x402 payment polling...')
+    setX402Status('Waiting for x402 payment execution...')
+    setRedirectInfo({ message: 'Payment is being processed. Please wait...' })
+    
+    let attempts = 0
+    const maxAttempts = 60 // Poll for up to 5 minutes (60 attempts * 5 seconds)
+    
+    const poll = async () => {
+      try {
+        attempts++
+        console.log(`   Checking x402 payment status (attempt ${attempts}/${maxAttempts})...`)
+        
+        const response = await fetch('/api/relayer/check-deposit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: depositAddress }),
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        
+        // Check if signedPayload exists in database
+        if (data.signedPayload && data.redirectUrl) {
+          console.log('✅ Found signedPayload in DB, redirecting to content...')
+          setX402Status('x402 payment completed')
+          setRedirectInfo({ 
+            url: data.redirectUrl,
+            message: 'Redirecting to premium content...' 
+          })
+          
+          // Build content URL with deposit address only
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin
+          const contentUrl = new URL('/content', baseUrl)
+          contentUrl.searchParams.set('address', depositAddress)
+          
+          setDepositConfirmed(true)
+          setTimeout(() => {
+            window.location.href = contentUrl.toString()
+          }, 2000)
+          return // Stop polling
+        }
+        
+        // Continue polling if signedPayload not found yet
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000) // Poll every 5 seconds
+        } else {
+          console.log('⏸️ Max x402 polling attempts reached')
+          setX402Status('Payment processing is taking longer than expected. Please check back later.')
+        }
+      } catch (error) {
+        console.error('Error checking x402 payment status:', error)
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000) // Retry after 5 seconds
+        } else {
+          console.log('⏸️ Max x402 polling attempts reached after error')
+          setX402Status('Error checking payment status. Please try refreshing the page.')
         }
       }
     }
