@@ -159,78 +159,95 @@ export function IntentsQR({ depositAddress, amount, deadline, quoteWaitingTimeMs
   const statusInfo = getStatusInfo()
 
   return (
-    <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 w-full shadow-xl shadow-purple-500/10">
-      <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-white mb-2">
+    <div className="bg-gradient-to-br from-gray-800/60 via-gray-800/40 to-gray-900/40 backdrop-blur-xl border border-purple-500/20 rounded-3xl p-8 w-full shadow-2xl shadow-purple-500/20">
+      {/* Header Section */}
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 mb-4">
+          <span className="text-2xl">⚡</span>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-3 tracking-tight">
           Deposit Zcash
         </h2>
         {serviceName && (
-          <p className="text-sm text-purple-300 font-medium mb-2">
-            {serviceName}
-          </p>
+          <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 mb-3">
+            <p className="text-sm text-purple-300 font-semibold">
+              {serviceName}
+            </p>
+          </div>
         )}
-        <p className="text-sm text-gray-400">
-          Deposit <span className="text-purple-400 font-medium">{amount} ZEC</span> to continue
+        <p className="text-base text-gray-300">
+          Deposit <span className="text-purple-400 font-bold text-lg">{amount} ZEC</span> to continue
         </p>
       </div>
       
-      <div className="flex flex-col items-center gap-4">
-        <div className="bg-white p-4 rounded-xl shadow-lg">
+      {/* QR Code Section */}
+      <div className="flex flex-col items-center gap-6 mb-6">
+        <div className="bg-white p-5 rounded-2xl shadow-2xl ring-4 ring-purple-500/10">
           <QRCodeSVG
             value={depositAddress}
-            size={200}
+            size={220}
             level="H"
             includeMargin={true}
           />
         </div>
         
-        <div className="w-full space-y-2">
+        {/* Address Section */}
+        <div className="w-full space-y-3">
           <div className="text-center">
-            <p className="text-xs text-gray-500 mb-2">Zcash Deposit Address</p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Zcash Deposit Address</p>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={depositAddress}
-              readOnly
-              className="flex-1 px-3 py-2 text-xs font-mono bg-gray-900/50 border border-gray-700/50 rounded-lg text-gray-300 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
-              style={{ wordBreak: 'break-all' }}
-            />
+          <div className="flex items-center gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={depositAddress}
+                readOnly
+                className="w-full px-4 py-3 text-sm font-mono bg-gray-900/60 border-2 border-gray-700/50 rounded-xl text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all"
+                style={{ wordBreak: 'break-all' }}
+              />
+            </div>
             <button
               onClick={handleCopy}
-              className="px-3 py-2 bg-gray-700/50 hover:bg-gray-700 border border-gray-600/50 rounded-lg transition-colors flex-shrink-0"
+              className={`px-4 py-3 rounded-xl transition-all flex-shrink-0 border-2 ${
+                copied 
+                  ? 'bg-green-500/20 border-green-500/50 hover:bg-green-500/30' 
+                  : 'bg-gray-700/50 border-gray-600/50 hover:bg-gray-700 hover:border-purple-500/50'
+              }`}
             >
               {copied ? (
-                <Check className="w-4 h-4 text-green-400" />
+                <Check className="w-5 h-5 text-green-400" />
               ) : (
-                <Copy className="w-4 h-4 text-gray-400" />
+                <Copy className="w-5 h-5 text-gray-300" />
               )}
             </button>
           </div>
-          <p className="text-xs text-gray-500 text-center mt-2">
+          <p className="text-xs text-gray-500 text-center mt-3">
             Send ZEC to this shielded address
           </p>
+          
+          {/* Countdown */}
           {(deadline || quoteWaitingTimeMs) && countdown !== null && countdown > 0 && (
-            <div className="text-center mt-2">
-              <p className="text-xs text-purple-400">
-                Deposit: <span className="font-semibold">{formatTime(countdown)}</span> remaining
+            <div className="text-center mt-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20">
+              <p className="text-sm text-gray-400 mb-1">Time Remaining</p>
+              <p className="text-lg font-bold text-purple-400 font-mono">
+                {formatTime(countdown)}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Status Badge - at the bottom */}
+      {/* Status Badge - Enhanced */}
       {statusInfo && (
-        <div className="mt-6 pt-6 border-t border-gray-700/50">
-          <div className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg ${statusInfo.bgColor} ${statusInfo.borderColor} border`}>
-            <span className="text-base">{statusInfo.icon}</span>
-            <span className={`text-sm font-medium ${statusInfo.color}`}>
+        <div className="mt-8 pt-6 border-t border-gray-700/30">
+          <div className={`flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl ${statusInfo.bgColor} ${statusInfo.borderColor} border-2 backdrop-blur-sm`}>
+            <span className="text-xl">{statusInfo.icon}</span>
+            <span className={`text-sm font-semibold ${statusInfo.color}`}>
               {statusInfo.text}
             </span>
             {pollingAttempt !== undefined && pollingAttempt > 0 && (
-              <span className={`text-xs ${statusInfo.color} opacity-70 ml-1`}>
-                • {pollingAttempt}
+              <span className={`text-xs ${statusInfo.color} opacity-70 font-medium bg-black/20 px-2 py-1 rounded-full`}>
+                {pollingAttempt}
               </span>
             )}
           </div>

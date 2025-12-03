@@ -360,6 +360,7 @@ function HomeContent() {
       const currency = parsed.metadata?.currency || ''
       const chain = parsed.chain || parsed.metadata?.chain || ''
       const receivingAddress = parsed.metadata?.receivingAddress || ''
+      const serviceId = parsed.metadata?.serviceId
       
       // Debug logging
       console.log('Parsed intent:', {
@@ -367,9 +368,17 @@ function HomeContent() {
         currency,
         chain,
         receivingAddress,
+        serviceId,
         aiMessage: parsed.aiMessage,
         fullParsed: parsed
       })
+      
+      // If a service was matched, redirect to service page
+      if (serviceId) {
+        console.log('✅ Service matched, redirecting to service:', serviceId)
+        router.push(`/?service=${serviceId}`, { scroll: false })
+        return
+      }
       
       // Normalize currency to USDC if it's USDT or any USD variant
       const normalizedCurrency = (currency && (currency.toUpperCase() === 'USDT' || currency.toUpperCase().includes('USD'))) 
@@ -837,20 +846,20 @@ function HomeContent() {
         <AmbientBackground />
         
         {/* Branding */}
-        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 text-center px-4">
+        <div className="absolute top-10 md:top-12 left-1/2 transform -translate-x-1/2 z-0 text-center px-4 w-full max-w-4xl pointer-events-none">
           <button
             onClick={handleNewQuery}
-            className="text-4xl md:text-6xl font-bold gradient-text hover:opacity-90 transition-opacity cursor-pointer block tracking-tight"
+            className="text-4xl md:text-6xl font-bold gradient-text hover:opacity-90 transition-opacity cursor-pointer block tracking-tight mx-auto pointer-events-auto"
           >
             Anyone Pay Legend
           </button>
-          <p className="text-sm md:text-base text-gray-300 mt-3 font-normal leading-relaxed max-w-2xl mx-auto">
-            Private cross-chain x402 payments for merchants. Powered by AI, NEAR Intents & Chain Signatures
+          <p className="text-sm md:text-base text-gray-300 mt-5 md:mt-6 mb-8 md:mb-12 font-normal leading-relaxed max-w-2xl mx-auto">
+            Private cross-chain x402 payments for merchants. Powered by Near AI, NEAR Intents & Chain Signatures
           </p>
         </div>
         
         {/* All components in one page flow - centered and shortened */}
-        <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 max-w-2xl mx-auto w-full pt-20">
+        <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 max-w-2xl mx-auto w-full pt-48 md:pt-56 relative z-10">
           {/* Input - first component */}
           <div className="w-full">
             <FloatingInput
@@ -887,14 +896,14 @@ function HomeContent() {
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.4 }}
-              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-6 shadow-xl shadow-purple-500/10"
+              className="w-full bg-gradient-to-br from-purple-500/10 via-gray-800/40 to-blue-500/10 backdrop-blur-xl border-2 border-purple-500/30 rounded-3xl p-8 shadow-2xl shadow-purple-500/20"
             >
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <span className="text-purple-400 text-lg">🤖</span>
+              <div className="flex items-start gap-5">
+                <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/30 to-blue-500/20 flex items-center justify-center border border-purple-500/40">
+                  <span className="text-purple-400 text-2xl">🤖</span>
                 </div>
                 <div className="flex-1">
-                  <p className="text-white text-sm leading-relaxed">
+                  <p className="text-white text-base leading-relaxed">
                     {intentData.aiMessage}
                   </p>
                 </div>
@@ -930,15 +939,15 @@ function HomeContent() {
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.4 }}
-              className="w-full bg-green-500/20 backdrop-blur-xl border border-green-500/50 rounded-2xl p-6 shadow-xl shadow-green-500/10"
+              className="w-full bg-gradient-to-br from-green-500/20 via-green-500/10 to-blue-500/10 backdrop-blur-xl border-2 border-green-500/40 rounded-3xl p-8 shadow-2xl shadow-green-500/20"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <span className="text-green-400 text-2xl">✅</span>
+              <div className="flex items-center gap-5">
+                <div className="flex-shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/30 to-green-600/20 flex items-center justify-center border-2 border-green-500/40">
+                  <span className="text-green-400 text-3xl">✅</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-green-400 font-semibold text-lg mb-1">Deposit Detected!</h3>
-                  <p className="text-gray-300 text-sm">
+                  <h3 className="text-green-400 font-bold text-xl mb-2">Deposit Detected!</h3>
+                  <p className="text-gray-200 text-base leading-relaxed">
                     Your deposit has been received and is being processed. The swap is in progress...
                   </p>
                 </div>
@@ -952,15 +961,15 @@ function HomeContent() {
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.4 }}
-              className="w-full bg-green-500/20 backdrop-blur-xl border border-green-500/50 rounded-2xl p-6 shadow-xl shadow-green-500/10"
+              className="w-full bg-gradient-to-br from-green-500/20 via-green-500/10 to-emerald-500/10 backdrop-blur-xl border-2 border-green-500/40 rounded-3xl p-8 shadow-2xl shadow-green-500/20"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <span className="text-green-400 text-2xl">🎉</span>
+              <div className="flex items-center gap-5">
+                <div className="flex-shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/30 to-emerald-500/20 flex items-center justify-center border-2 border-green-500/40">
+                  <span className="text-green-400 text-3xl">🎉</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-green-400 font-semibold text-lg mb-1">Swap Successful!</h3>
-                  <p className="text-gray-300 text-sm">
+                  <h3 className="text-green-400 font-bold text-xl mb-2">Swap Successful!</h3>
+                  <p className="text-gray-200 text-base leading-relaxed">
                     Your swap has been completed successfully. {x402Status ? `` : 'Waiting for x402 payment execution...'}
                   </p>
                 </div>
@@ -990,21 +999,25 @@ function HomeContent() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-4 shadow-xl shadow-purple-500/10"
+              className="w-full bg-gradient-to-br from-purple-500/20 via-gray-800/40 to-blue-500/10 backdrop-blur-xl border-2 border-purple-500/30 rounded-3xl p-6 shadow-2xl shadow-purple-500/20"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
                   {x402Status === 'x402 payment completed' ? (
-                    <span className="text-green-400 text-xl">✅</span>
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/30 to-emerald-500/20 flex items-center justify-center border-2 border-green-500/40">
+                      <span className="text-green-400 text-2xl">✅</span>
+                    </div>
                   ) : (
-                    <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/30 to-blue-500/20 flex items-center justify-center border-2 border-purple-500/40">
+                      <div className="w-6 h-6 border-3 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                    </div>
                   )}
-                  <div>
-                    <p className="text-sm text-white">
+                  <div className="flex-1">
+                    <p className="text-base text-white font-semibold mb-1">
                       {x402Status}
                     </p>
                     {redirectInfo?.message && (
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-sm text-gray-400">
                         {redirectInfo.message}
                       </p>
                     )}
@@ -1014,7 +1027,7 @@ function HomeContent() {
                           ? `${window.location.origin}/content?address=${intentData.depositAddress}`
                           : `/content?address=${intentData.depositAddress}`
                         }
-                        className="text-xs text-purple-400 mt-1 font-mono truncate max-w-md hover:text-purple-300 hover:underline transition-colors block"
+                        className="text-sm text-purple-400 mt-2 font-mono break-all hover:text-purple-300 hover:underline transition-colors inline-block"
                         target="_blank"
                         rel="noopener noreferrer"
                       >

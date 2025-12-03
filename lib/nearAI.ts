@@ -28,8 +28,8 @@ export interface AnalyzedIntent {
 
 export async function analyzePromptWithNearAI(prompt: string): Promise<AnalyzedIntent> {
   // First, try to match with service registry using semantic search
-  // Only returns if similarity is above threshold (0.7 = 70% match)
-  const matchedService = await findBestService(prompt, 0.7)
+  // Lower threshold (0.6 = 60% match) for better matching of service names
+  const matchedService = await findBestService(prompt, 0.6)
   
   if (matchedService) {
     // If service is found, use its details with direct URL
